@@ -35,5 +35,23 @@
     "role": "customer",
     "pass": "6caef0dbcacdb1571ae124b6afa2b0d9:063a1ab2cbce3c9cb95736d9731bf72b633a123f13774c90e10194bb4451cb775222b33585e49c1cf2659316688275b4ac0435b6863e4713ce99bd59a0e3ff2b",
     "createdAt": "2026-10-10T05:45:35.186Z"
+  },
+  {
+    "id": 5,
+    "name": "balu",
+    "email": "balu@gmail.com",
+    "phone": "7699472456",
+    "role": "customer",
+    "pass": "729091ce14a920d90e200a4052a8836b:ecf7c0e524184f205032eabecabe8f207e00df49c4c195b0689309bb36c8b0526e51e901d5ffbd4144d289e85fc20218cdccd6f2f2b627875596de20f46501b0",
+    "createdAt": "2026-10-10T10:50:31.922Z"
+  },
+  {
+    "id": 6,
+    "name": "ali",
+    "email": "ali@gmail.com",
+    "phone": "8366495765",
+    "role": "customer",
+    "pass": "230a9ae5c8556e021819672537dd24bb:8d5f0f3e5dce341e5fb2d409b5a712ba8d417a6cefab645c6148dec9cd6b2ae226a314dc7ea49f0051d74abee1a8771a092d865f55dac7a77b9f484373ed2352",
+    "createdAt": "2026-10-10T10:59:28.974Z"
   }
 ]
