@@ -6,6 +6,7 @@ const ORG=["All","Japan","Korea","China"];
 const F={japan:"🇯🇵",korea:"🇰🇷",china:"🇨🇳"};
 let cat="All",sub="All",org="All",cart=JSON.parse(localStorage.getItem("kz_cart")||"{}");
 const $=id=>document.getElementById(id);
+let page=1;const PER=15; // 15 products per page
 const inr=n=>"₹"+n.toLocaleString("en-IN");
 function nav(){
   const cats=["All",...new Set(P.map(p=>p.c))];
@@ -21,9 +22,23 @@ function render(){
   const q=$("q").value.trim().toLowerCase(),s=$("sort").value;
   let l=P.filter(p=>(org=="All"||p.o==org)&&(q?(p.n+" "+p.c+" "+(p.sub||"")+" "+p.o).toLowerCase().includes(q):(cat=="All"||p.c==cat)&&(sub=="All"||p.sub==sub)));
   if(s=="1")l.sort((a,b)=>a.p-b.p);if(s=="2")l.sort((a,b)=>b.p-a.p);
+  const total=l.length,pages=Math.max(1,Math.ceil(total/PER));if(page>pages)page=pages;
+  l=l.slice((page-1)*PER,page*PER);
   $("ttl").textContent=q?`Results for "${q}"`:cat=="All"?"All products":(sub!="All"?cat+" · "+sub:cat);
   $("grid").innerHTML=l.length?l.map(p=>`<article class="card" data-href="/product.html?id=${p.id}"><a class="pic" href="/product.html?id=${p.id}" aria-label="View ${esc(p.n)}"><i>${F[p.o.toLowerCase()]} ${p.o}</i>${pic(p)}</a><div class="info"><h3><a href="/product.html?id=${p.id}">${esc(p.n)}</a></h3><small>${p.c}${p.sub?" · "+p.sub:""}</small><div class="pr">${inr(p.p)}<s>${inr(p.m)}</s><em>${Math.round((1-p.p/p.m)*100)}% off</em></div><button class="add" data-a="${p.id}">Add to cart</button><button class="add buy" data-b="${p.id}">Buy now</button></div></article>`).join(""):`<div class="empty">No products found. Try another search or category.</div>`;
-  nav();
+  pager(pages,total);nav();
+}
+function pager(pages,total){
+  const el=$("pager");if(!el)return;
+  if(total<=PER){el.innerHTML="";return}
+  const nums=[];
+  for(let i=1;i<=pages;i++){
+    if(i==1||i==pages||Math.abs(i-page)<=1)nums.push(i);
+    else if(nums[nums.length-1]!=="…")nums.push("…");
+  }
+  el.innerHTML=`<button data-pg="${page-1}" ${page==1?"disabled":""} aria-label="Previous page">‹ Prev</button>`
+    +nums.map(n=>n==="…"?`<span>…</span>`:`<button class="${n==page?"on":""}" data-pg="${n}" ${n==page?'aria-current="page"':""}>${n}</button>`).join("")
+    +`<button data-pg="${page+1}" ${page==pages?"disabled":""} aria-label="Next page">Next ›</button>`;
 }
 function drawCart(){
   if(!P.length&&Object.keys(cart).length)return;
@@ -39,15 +54,16 @@ document.addEventListener("click",e=>{
   const cd=e.target.closest(".card[data-href]");
   if(cd&&!e.target.closest("button,a")&&!e.metaKey&&!e.ctrlKey){location.href=cd.dataset.href;return}
   const b=e.target.closest("button");if(!b)return;
-  if(b.dataset.c){cat=b.dataset.c;sub="All";render()}
-  if(b.dataset.s){sub=b.dataset.s;render()}
-  if(b.dataset.o){org=b.dataset.o;render()}
+  if(b.dataset.c){cat=b.dataset.c;sub="All";page=1;render()}
+  if(b.dataset.s){sub=b.dataset.s;page=1;render()}
+  if(b.dataset.o){org=b.dataset.o;page=1;render()}
+  if(b.dataset.pg&&!b.disabled){page=+b.dataset.pg;render();$("shop").scrollIntoView({behavior:"smooth"});return}
   if(b.dataset.b){cart[b.dataset.b]=(cart[b.dataset.b]||0)+1;drawCart();$("co").click();return}
   if(b.dataset.a){cart[b.dataset.a]=(cart[b.dataset.a]||0)+1;drawCart();toast("Added to cart")}
   if(b.dataset.d){const i=b.dataset.i;cart[i]+=+b.dataset.d;if(cart[i]<1)delete cart[i];drawCart()}
 });
 $("cb").onclick=()=>open(true);$("cx").onclick=()=>open(false);$("veil").onclick=()=>open(false);
-$("q").oninput=render;if($("sort"))$("sort").onchange=render;
+$("q").oninput=()=>{page=1;render()};if($("sort"))$("sort").onchange=()=>{page=1;render()};
 $("co").onclick=()=>{
   if(!Object.keys(cart).length)return toast("Cart is empty");
   if(!localStorage.getItem("kz_token")){location.href="/login.html?next=/checkout.html";return}
