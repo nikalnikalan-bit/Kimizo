@@ -1,40 +1,47 @@
 const { google } = require('googleapis');
 const stream = require('stream');
 
-// Vercel Environment Variable-ல் இருந்து வரும் Private Key-ஐ சரியான பார்மட்டுக்கு மாற்றுதல்
 const privateKey = (process.env.GOOGLE_PRIVATE_KEY || '')
   .replace(/\\n/g, '\n')
-  .replace(/^"|"$/g, '');
+  .replace(/^"|"$/g, '')
+  .trim();
+
+const clientEmail = (process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || '')
+  .replace(/^"|"$/g, '')
+  .trim();
+
+const FOLDER_ID = (process.env.GOOGLE_DRIVE_FOLDER_ID || '')
+  .replace(/^"|"$/g, '')
+  .trim();
 
 const auth = new google.auth.GoogleAuth({
   credentials: {
-    client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+    client_email: clientEmail,
     private_key: privateKey,
   },
   scopes: ['https://www.googleapis.com/auth/drive'],
 });
 
 const drive = google.drive({ version: 'v3', auth });
-const FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID;
 
-// Folder-ல் உள்ள குறிப்பிட்ட ஃபைலின் ID-ஐக் கண்டறியும் helper
 async function getFileId(filename) {
   const res = await drive.files.list({
     q: `'${FOLDER_ID}' in parents and name = '${filename}.json' and trashed = false`,
     fields: 'files(id, name)',
     spaces: 'drive',
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
   });
   return res.data.files && res.data.files.length > 0 ? res.data.files[0].id : null;
 }
 
-// Drive-ல் இருந்து JSON data-ஐப் பெறுதல்
 async function readFromDrive(filename) {
   try {
     const fileId = await getFileId(filename);
     if (!fileId) return [];
 
     const res = await drive.files.get(
-      { fileId: fileId, alt: 'media' },
+      { fileId: fileId, alt: 'media', supportsAllDrives: true },
       { responseType: 'json' }
     );
     return res.data;
@@ -44,7 +51,6 @@ async function readFromDrive(filename) {
   }
 }
 
-// Drive-க்கு JSON data-ஐச் சேமித்தல்
 async function writeToDrive(filename, data) {
   try {
     const fileId = await getFileId(filename);
@@ -60,6 +66,7 @@ async function writeToDrive(filename, data) {
       await drive.files.update({
         fileId: fileId,
         media: media,
+        supportsAllDrives: true,
       });
     } else {
       await drive.files.create({
@@ -68,6 +75,7 @@ async function writeToDrive(filename, data) {
           parents: [FOLDER_ID],
         },
         media: media,
+        supportsAllDrives: true,
       });
     }
     console.log(`Successfully synced ${filename} to Drive!`);
