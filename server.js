@@ -28,11 +28,11 @@ const read = n => {
   try { return JSON.parse(fs.readFileSync(file(n))); } catch { return cache[n] || []; }
 };
 
-// Write function updates in-memory cache immediately, attempts local write if available, and syncs to Google Drive
+// Write function updates in-memory cache immediately, attempts local write if available, and returns Drive sync promise
 const write = (n, d) => {
   cache[n] = d;
   try { fs.writeFileSync(file(n), JSON.stringify(d, null, 2)); } catch (_) {}
-  writeToDrive(n, d).catch(err => console.error(`Failed to sync ${n} to Drive:`, err.message));
+  return writeToDrive(n, d).catch(err => console.error(`Failed to sync ${n} to Drive:`, err.message));
 };
 
 app.use(express.json());
@@ -67,7 +67,7 @@ const users = () => read('users');
 const publicUser = u => ({ id: u.id, name: u.name, email: u.email, phone: u.phone || '', role: u.role });
 
 // Admin account creation helper
-const ensureAdmin = () => {
+const ensureAdmin = async () => {
   const list = users();
   const email = (process.env.ADMIN_EMAIL || 'admin@zanoit.com').toLowerCase();
   if (!list.find(u => u.email === email)) {
@@ -80,7 +80,7 @@ const ensureAdmin = () => {
       pass: hashPassword(process.env.ADMIN_PASSWORD || 'Admin@123'),
       createdAt: new Date().toISOString()
     });
-    write('users', list);
+    await write('users', list);
   }
 };
 ensureAdmin();
@@ -101,7 +101,7 @@ const limited = k => {
   return tries[k].length >= 10;
 };
 
-app.post('/api/auth/register', (req, res) => {
+app.post('/api/auth/register', async (req, res) => {
   const { name, email, password, phone } = req.body || {};
   const em = String(email || '').trim().toLowerCase();
   if (!String(name || '').trim() || !/^\S+@\S+\.\S+$/.test(em) || String(password || '').length < 6)
@@ -120,7 +120,8 @@ app.post('/api/auth/register', (req, res) => {
     pass: hashPassword(String(password)),
     createdAt: new Date().toISOString()
   };
-  list.push(u); write('users', list);
+  list.push(u);
+  await write('users', list);
   res.status(201).json({ token: signToken({ id: u.id, role: u.role }, SECRET), user: publicUser(u) });
 });
 
@@ -179,13 +180,13 @@ const getSettings = () => {
   try { return { ...DEFAULTS, ...(read('settings') || {}) }; } catch { return { ...DEFAULTS }; }
 };
 app.get('/api/settings', (req, res) => res.json(getSettings()));
-app.put('/api/settings', admin, (req, res) => {
+app.put('/api/settings', admin, async (req, res) => {
   const cur = getSettings(), b = req.body || {};
   for (const k of Object.keys(DEFAULTS)) {
     if (b[k] === undefined) continue;
     cur[k] = typeof DEFAULTS[k] === 'number' ? Math.max(0, Number(b[k]) || 0) : String(b[k]).trim();
   }
-  write('settings', cur);
+  await write('settings', cur);
   res.json(cur);
 });
 app.get('/api/admin/check', admin, (req, res) => res.json({ ok: true }));
@@ -215,34 +216,36 @@ const clean = b => ({
 });
 const valid = p => p.n && p.c && p.o && p.p > 0;
 
-app.post('/api/products', admin, (req, res) => {
+app.post('/api/products', admin, async (req, res) => {
   const list = read('products'), p = clean(req.body);
   if (!valid(p)) return res.status(400).json({ error: 'n, c, o and p (price) are required' });
   p.id = list.reduce((m, x) => Math.max(m, x.id), 0) + 1;
-  list.push(p); write('products', list);
+  list.push(p);
+  await write('products', list);
   res.status(201).json(p);
 });
 
-app.put('/api/products/:id', admin, (req, res) => {
+app.put('/api/products/:id', admin, async (req, res) => {
   const list = read('products'), i = list.findIndex(x => x.id == req.params.id);
   if (i < 0) return res.status(404).json({ error: 'Product not found' });
   const p = { ...list[i], ...clean({ ...list[i], ...req.body }), id: list[i].id };
   if (!valid(p)) return res.status(400).json({ error: 'Invalid product data' });
   if (list[i].img && list[i].img !== p.img) dropFile(list[i].img);
-  list[i] = p; write('products', list);
+  list[i] = p;
+  await write('products', list);
   res.json(p);
 });
 
-app.delete('/api/products/:id', admin, (req, res) => {
+app.delete('/api/products/:id', admin, async (req, res) => {
   const list = read('products'), next = list.filter(x => x.id != req.params.id);
   if (next.length === list.length) return res.status(404).json({ error: 'Product not found' });
   dropFile((list.find(x => x.id == req.params.id) || {}).img);
-  write('products', next);
+  await write('products', next);
   res.json({ ok: true });
 });
 
 // ---------- Orders ----------
-app.post('/api/orders', authed, (req, res) => {
+app.post('/api/orders', authed, async (req, res) => {
   const { name, phone, address, items } = req.body || {};
   if (!name || !phone || !address || !Array.isArray(items) || !items.length)
     return res.status(400).json({ error: 'name, phone, address and items are required' });
@@ -263,14 +266,15 @@ app.post('/api/orders', authed, (req, res) => {
     userId: req.user.id, name, phone, address, items: lines, subtotal: total, shipping, total: total + shipping, status: 'placed', createdAt: new Date().toISOString(),
     history: [{ status: 'placed', at: new Date().toISOString(), note: 'Order received' }]
   };
-  orders.push(order); write('orders', orders);
+  orders.push(order);
+  await write('orders', orders);
   res.status(201).json(order);
 });
 
 app.get('/api/my-orders', authed, (req, res) => res.json(read('orders').filter(o => o.userId === req.user.id).reverse()));
 app.get('/api/orders', admin, (req, res) => res.json(read('orders').reverse()));
 
-app.patch('/api/orders/:id', admin, (req, res) => {
+app.patch('/api/orders/:id', admin, async (req, res) => {
   const orders = read('orders'), o = orders.find(x => x.id == req.params.id);
   if (!o) return res.status(404).json({ error: 'Order not found' });
   const ok = ['placed', 'packed', 'shipped', 'delivered', 'cancelled'];
@@ -278,7 +282,7 @@ app.patch('/api/orders/:id', admin, (req, res) => {
   const note = String(req.body.note || '').trim().slice(0, 140);
   o.status = req.body.status;
   o.history = [...(o.history || []), { status: o.status, at: new Date().toISOString(), note }];
-  write('orders', orders);
+  await write('orders', orders);
   res.json(o);
 });
 
@@ -300,7 +304,7 @@ app.use((err, req, res, next) =>
     if (Array.isArray(o) && o.length) cache.orders = o;
     if (s && typeof s === 'object' && Object.keys(s).length) cache.settings = s;
 
-    ensureAdmin();
+    await ensureAdmin();
   } catch (e) {
     console.warn('Initial Drive sync warning:', e.message);
   }
