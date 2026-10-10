@@ -240,3 +240,4 @@ app.use((err, req, res, next) =>
   res.status(err.status || 500).json({ error: err.type === 'entity.too.large' ? 'Image is too large (max 5 MB)' : err.message || 'Server error' }));
 
 app.listen(PORT, () => console.log(`Kimizo running → http://localhost:${PORT}  |  Admin → http://localhost:${PORT}/admin`));
+module.exports = app;
