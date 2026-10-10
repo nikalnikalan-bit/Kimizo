@@ -1,12 +1,18 @@
 const { google } = require('googleapis');
 const stream = require('stream');
 
-const auth = new google.auth.JWT(
-  process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-  null,
-  (process.env.GOOGLE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
-  ['https://www.googleapis.com/auth/drive']
-);
+// Vercel Environment Variable-ல் இருந்து வரும் Private Key-ஐ சரியான பார்மட்டுக்கு மாற்றுதல்
+const privateKey = (process.env.GOOGLE_PRIVATE_KEY || '')
+  .replace(/\\n/g, '\n')
+  .replace(/^"|"$/g, '');
+
+const auth = new google.auth.GoogleAuth({
+  credentials: {
+    client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+    private_key: privateKey,
+  },
+  scopes: ['https://www.googleapis.com/auth/drive'],
+});
 
 const drive = google.drive({ version: 'v3', auth });
 const FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID;
@@ -18,7 +24,7 @@ async function getFileId(filename) {
     fields: 'files(id, name)',
     spaces: 'drive',
   });
-  return res.data.files.length > 0 ? res.data.files[0].id : null;
+  return res.data.files && res.data.files.length > 0 ? res.data.files[0].id : null;
 }
 
 // Drive-ல் இருந்து JSON data-ஐப் பெறுதல்
@@ -51,13 +57,11 @@ async function writeToDrive(filename, data) {
     };
 
     if (fileId) {
-      // ஏற்கெனவே ஃபைல் இருந்தால் update செய்தல்
       await drive.files.update({
         fileId: fileId,
         media: media,
       });
     } else {
-      // ஃபைல் இல்லையெனில் புதிதாக உருவாக்குதல்
       await drive.files.create({
         requestBody: {
           name: `${filename}.json`,
@@ -66,8 +70,10 @@ async function writeToDrive(filename, data) {
         media: media,
       });
     }
+    console.log(`Successfully synced ${filename} to Drive!`);
   } catch (err) {
     console.error(`Error writing ${filename} to Drive:`, err.message);
+    throw err;
   }
 }
 
