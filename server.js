@@ -4,16 +4,60 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const { hashPassword, verifyPassword, signToken, verifyToken } = require('./auth');
+const { readFromDrive, writeToDrive } = require('./drive-db');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
+
+// Local memory cache populated from Google Drive
+const cache = {
+  users: [],
+  products: [],
+  orders: [],
+  settings: {}
+};
+
 const file = n => path.join(__dirname, 'data', n + '.json');
-const read = n => { try { return JSON.parse(fs.readFileSync(file(n))); } catch { return []; } };
-const write = (n, d) => fs.writeFileSync(file(n), JSON.stringify(d, null, 2));
+
+// Read function maintains synchronous signature using cache, with local fallback
+const read = n => {
+  if (cache[n] !== undefined && (Array.isArray(cache[n]) ? cache[n].length > 0 : Object.keys(cache[n]).length > 0)) {
+    return cache[n];
+  }
+  try { return JSON.parse(fs.readFileSync(file(n))); } catch { return cache[n] || []; }
+};
+
+// Write function updates in-memory cache immediately, attempts local write if available, and syncs to Google Drive
+const write = (n, d) => {
+  cache[n] = d;
+  try { fs.writeFileSync(file(n), JSON.stringify(d, null, 2)); } catch (_) {}
+  writeToDrive(n, d).catch(err => console.error(`Failed to sync ${n} to Drive:`, err.message));
+};
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Serverless / Vercel middleware: Request varumbo cache empty-aa irundha Google Drive-la irundhu load pannum
+app.use(async (req, res, next) => {
+  if (!cache.users.length && !cache.products.length && process.env.GOOGLE_DRIVE_FOLDER_ID) {
+    try {
+      const [u, p, o, s] = await Promise.all([
+        readFromDrive('users'),
+        readFromDrive('products'),
+        readFromDrive('orders'),
+        readFromDrive('settings')
+      ]);
+      if (Array.isArray(u) && u.length) cache.users = u;
+      if (Array.isArray(p) && p.length) cache.products = p;
+      if (Array.isArray(o) && o.length) cache.orders = o;
+      if (s && typeof s === 'object' && Object.keys(s).length) cache.settings = s;
+    } catch (e) {
+      console.warn('Drive background load warning:', e.message);
+    }
+  }
+  next();
+});
 
 const normPhone = p => {
   const d = String(p || '').replace(/\D/g, '').replace(/^(91|0)(?=\d{10}$)/, '');
@@ -22,9 +66,10 @@ const normPhone = p => {
 const users = () => read('users');
 const publicUser = u => ({ id: u.id, name: u.name, email: u.email, phone: u.phone || '', role: u.role });
 
-// Admin account creation on first start
-(() => {
-  const list = users(), email = (process.env.ADMIN_EMAIL || 'admin@zanoit.com').toLowerCase();
+// Admin account creation helper
+const ensureAdmin = () => {
+  const list = users();
+  const email = (process.env.ADMIN_EMAIL || 'admin@zanoit.com').toLowerCase();
   if (!list.find(u => u.email === email)) {
     list.push({
       id: list.reduce((m, x) => Math.max(m, x.id), 0) + 1,
@@ -37,7 +82,8 @@ const publicUser = u => ({ id: u.id, name: u.name, email: u.email, phone: u.phon
     });
     write('users', list);
   }
-})();
+};
+ensureAdmin();
 
 const authed = (req, res, next) => {
   const p = verifyToken((req.get('authorization') || '').replace(/^Bearer /, ''), SECRET);
@@ -101,7 +147,7 @@ require('./auth-extra')(app, { users, write, publicUser, hashPassword, signToken
 
 // ---------- Image upload (admin only) ----------
 const UP = path.join(__dirname, 'public', 'uploads');
-fs.mkdirSync(UP, { recursive: true });
+try { fs.mkdirSync(UP, { recursive: true }); } catch (_) {}
 const sniff = b => {
   if (b.length < 12) return null;
   if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'jpg';
@@ -130,7 +176,7 @@ const DEFAULTS = {
   announcement: '', phone: '', email: '', shippingFee: 49, freeAbove: 999
 };
 const getSettings = () => {
-  try { return { ...DEFAULTS, ...JSON.parse(fs.readFileSync(file('settings'))) }; } catch { return { ...DEFAULTS }; }
+  try { return { ...DEFAULTS, ...(read('settings') || {}) }; } catch { return { ...DEFAULTS }; }
 };
 app.get('/api/settings', (req, res) => res.json(getSettings()));
 app.put('/api/settings', admin, (req, res) => {
@@ -239,5 +285,27 @@ app.patch('/api/orders/:id', admin, (req, res) => {
 app.use((err, req, res, next) =>
   res.status(err.status || 500).json({ error: err.type === 'entity.too.large' ? 'Image is too large (max 5 MB)' : err.message || 'Server error' }));
 
-app.listen(PORT, () => console.log(`Kimizo running → http://localhost:${PORT}  |  Admin → http://localhost:${PORT}/admin`));
+// Initial data hydration from Google Drive and Server Launch
+(async () => {
+  try {
+    const [u, p, o, s] = await Promise.all([
+      readFromDrive('users'),
+      readFromDrive('products'),
+      readFromDrive('orders'),
+      readFromDrive('settings')
+    ]);
+
+    if (Array.isArray(u) && u.length) cache.users = u;
+    if (Array.isArray(p) && p.length) cache.products = p;
+    if (Array.isArray(o) && o.length) cache.orders = o;
+    if (s && typeof s === 'object' && Object.keys(s).length) cache.settings = s;
+
+    ensureAdmin();
+  } catch (e) {
+    console.warn('Initial Drive sync warning:', e.message);
+  }
+
+  app.listen(PORT, () => console.log(`Kimizo running → http://localhost:${PORT}  |  Admin → http://localhost:${PORT}/admin`));
+})();
+
 module.exports = app;
