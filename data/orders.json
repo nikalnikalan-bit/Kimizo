@@ -1,0 +1,214 @@
+[
+  {
+    "id": 1001,
+    "userId": 2,
+    "name": "Easwar",
+    "phone": "7806880384",
+    "address": "tiruvarur",
+    "items": [
+      {
+        "id": 3,
+        "name": "Smart Fitness Band",
+        "price": 1199,
+        "qty": 1
+      },
+      {
+        "id": 4,
+        "name": "Portable Neck Fan",
+        "price": 699,
+        "qty": 1
+      }
+    ],
+    "subtotal": 1898,
+    "shipping": 0,
+    "total": 1898,
+    "status": "cancelled",
+    "createdAt": "2026-10-07T07:16:07.180Z",
+    "history": [
+      {
+        "status": "cancelled",
+        "at": "2026-10-09T08:47:16.155Z",
+        "note": ""
+      }
+    ]
+  },
+  {
+    "id": 1002,
+    "userId": 2,
+    "name": "Easwar",
+    "phone": "9344138115",
+    "address": "3/69-2 sivan south street,xxx,yyy, nagapattinam - 611001",
+    "items": [
+      {
+        "id": 3,
+        "name": "Smart Fitness Band",
+        "price": 1199,
+        "qty": 1
+      }
+    ],
+    "subtotal": 1199,
+    "shipping": 0,
+    "total": 1199,
+    "status": "shipped",
+    "createdAt": "2026-10-07T10:26:04.590Z",
+    "history": [
+      {
+        "status": "shipped",
+        "at": "2026-10-09T08:47:21.058Z",
+        "note": ""
+      }
+    ]
+  },
+  {
+    "id": 1003,
+    "userId": 2,
+    "name": "Easwar",
+    "phone": "9080706050",
+    "address": "dubai kurukku sandhu dubai, dubai - 100100",
+    "items": [
+      {
+        "id": 23,
+        "name": "hot wheels",
+        "price": 1999,
+        "qty": 1
+      }
+    ],
+    "subtotal": 1999,
+    "shipping": 0,
+    "total": 1999,
+    "status": "placed",
+    "createdAt": "2026-10-07T10:31:36.971Z"
+  },
+  {
+    "id": 1004,
+    "userId": 2,
+    "name": "Easwar",
+    "phone": "8989767654",
+    "address": "dubai kurukku sandhu dubai, dubai - 100100",
+    "items": [
+      {
+        "id": 1,
+        "name": "Wireless Pink Headphones",
+        "price": 1499,
+        "qty": 1
+      }
+    ],
+    "subtotal": 1499,
+    "shipping": 0,
+    "total": 1499,
+    "status": "placed",
+    "createdAt": "2026-10-07T10:49:17.536Z"
+  },
+  {
+    "id": 1005,
+    "userId": 2,
+    "name": "Easwar",
+    "phone": "7904025971",
+    "address": "railway street,, Thiruvarur - 611101",
+    "items": [
+      {
+        "id": 13,
+        "name": "Korean Style Handbag",
+        "price": 1799,
+        "qty": 1
+      }
+    ],
+    "subtotal": 1799,
+    "shipping": 0,
+    "total": 1799,
+    "status": "packed",
+    "createdAt": "2026-10-07T10:51:04.826Z"
+  },
+  {
+    "id": 1006,
+    "userId": 2,
+    "name": "Easwar",
+    "phone": "9089786758",
+    "address": "10 ,kuruku sandhu, arbi - 610010",
+    "items": [
+      {
+        "id": 2,
+        "name": "Mini Instant Camera",
+        "price": 3299,
+        "qty": 1
+      },
+      {
+        "id": 3,
+        "name": "Smart Fitness Band",
+        "price": 1199,
+        "qty": 1
+      }
+    ],
+    "subtotal": 4498,
+    "shipping": 0,
+    "total": 4498,
+    "status": "delivered",
+    "createdAt": "2026-10-09T05:26:07.199Z",
+    "history": [
+      {
+        "status": "placed",
+        "at": "2026-10-09T05:26:07.199Z",
+        "note": "Order received"
+      },
+      {
+        "status": "delivered",
+        "at": "2026-10-09T08:47:07.173Z",
+        "note": ""
+      }
+    ]
+  },
+  {
+    "id": 1007,
+    "userId": 3,
+    "name": "Bala Nikalan K",
+    "phone": "7806880384",
+    "address": "10 kuruku sandhu dubai, dubai - 611001",
+    "items": [
+      {
+        "id": 1,
+        "name": "Wireless Pink Headphones",
+        "price": 1499,
+        "qty": 1
+      }
+    ],
+    "subtotal": 1499,
+    "shipping": 0,
+    "total": 1499,
+    "status": "placed",
+    "createdAt": "2026-10-09T09:41:08.984Z",
+    "history": [
+      {
+        "status": "placed",
+        "at": "2026-10-09T09:41:08.984Z",
+        "note": "Order received"
+      }
+    ]
+  },
+  {
+    "id": 1008,
+    "userId": 4,
+    "name": "riyas",
+    "phone": "9488350740",
+    "address": "paiilvasa street vijayapurm, tiruvarur - 610001",
+    "items": [
+      {
+        "id": 23,
+        "name": "hot wheels",
+        "price": 1999,
+        "qty": 1
+      }
+    ],
+    "subtotal": 1999,
+    "shipping": 0,
+    "total": 1999,
+    "status": "placed",
+    "createdAt": "2026-10-10T05:46:52.812Z",
+    "history": [
+      {
+        "status": "placed",
+        "at": "2026-10-10T05:46:52.812Z",
+        "note": "Order received"
+      }
+    ]
+  }
+]

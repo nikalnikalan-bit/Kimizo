@@ -1,0 +1,39 @@
+[
+  {
+    "id": 1,
+    "name": "Admin",
+    "email": "admin@zanoit.com",
+    "phone": "",
+    "role": "admin",
+    "pass": "7cebf259ac3bbf4221d9cd16166652fe:16a7767a1c2a5813a1fe63f55b130e2c658405faf4583b9e04fd64e6265617facb55c56e83390a4ba2cae809cb0844e045792e7dc09daf48a5e73ab2d3881dad",
+    "createdAt": "2026-10-07T05:42:55.365Z"
+  },
+  {
+    "id": 2,
+    "name": "Easwar",
+    "email": "easwar@gmail.com",
+    "phone": "9344138115",
+    "role": "customer",
+    "pass": "1a15826da4890dc283b2acc46da9dbd9:1d65d470fe0d28e325fe2eb181d476fe283ddb44ea36b34f9d587dce1543a8b4a6bce2c26dafdcc912764463265efe20979ee423166a8785a5cccd4c86bd72ac",
+    "createdAt": "2026-10-07T05:44:34.323Z"
+  },
+  {
+    "id": 3,
+    "name": "Bala Nikalan K",
+    "email": "nikalnikalan@gmail.com",
+    "phone": "",
+    "role": "customer",
+    "pass": null,
+    "google": true,
+    "createdAt": "2026-10-09T07:45:19.523Z"
+  },
+  {
+    "id": 4,
+    "name": "riyas",
+    "email": "riyas@gmail.com",
+    "phone": "9488350740",
+    "role": "customer",
+    "pass": "6caef0dbcacdb1571ae124b6afa2b0d9:063a1ab2cbce3c9cb95736d9731bf72b633a123f13774c90e10194bb4451cb775222b33585e49c1cf2659316688275b4ac0435b6863e4713ce99bd59a0e3ff2b",
+    "createdAt": "2026-10-10T05:45:35.186Z"
+  }
+]

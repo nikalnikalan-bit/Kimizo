@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>My orders – Kimizo</title>
+<link rel="stylesheet" href="style.css">
+<style>
+[hidden]{display:none!important}
+.hl{margin-left:auto;display:flex;gap:16px;font-weight:700}.hl a{color:var(--ink);text-decoration:none}
+.page{max-width:900px;margin:24px auto;padding:0 4vw 60px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+h1{font-family:var(--h);font-weight:400;font-size:clamp(24px,4vw,34px);margin:0;background:var(--red);color:#fff;padding:4px 18px;border:3px solid var(--ink);box-shadow:5px 5px 0 var(--ink);transform:rotate(-1deg)}
+.rf{border:3px solid var(--ink);background:#fff;border-radius:99px;padding:6px 16px;font:inherit;font-weight:700;cursor:pointer;box-shadow:3px 3px 0 var(--ink)}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+.tabs button{border:3px solid var(--ink);background:#fff;border-radius:99px;padding:5px 14px;font:inherit;font-weight:700;cursor:pointer}
+.tabs button.on{background:var(--yellow);box-shadow:3px 3px 0 var(--ink)}
+.oc{background:#fff;border:3px solid var(--ink);border-radius:14px;box-shadow:6px 6px 0 var(--ink);padding:16px;margin-bottom:22px}
+.oh{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start}
+.oh .id{font-family:var(--h);font-size:18px}
+.oh small{color:var(--mute);display:block}
+.pill{display:inline-block;border:2px solid var(--ink);border-radius:99px;padding:2px 12px;font-size:12px;font-weight:700;box-shadow:2px 2px 0 var(--ink)}
+.s-placed{background:var(--yellow)}.s-packed{background:var(--sky)}.s-shipped{background:var(--orange)}.s-delivered{background:#2FBF71;color:#fff}.s-cancelled{background:var(--red);color:#fff}
+.thumbs{display:flex;gap:8px;margin:12px 0 0;flex-wrap:wrap}
+.pt{width:54px;height:54px;border:3px solid var(--ink);border-radius:10px;background:var(--yellow);display:grid;place-items:center;font-size:26px;overflow:hidden;position:relative}
+.pt img{width:100%;height:100%;object-fit:cover}
+.pt em{position:absolute;right:0;bottom:0;background:var(--ink);color:#fff;font-style:normal;font-size:10px;padding:0 5px;border-radius:6px 0 0 0}
+.tr{position:relative;margin:40px 0 8px}
+.line{position:absolute;top:16px;left:12.5%;right:12.5%;height:10px;background:#ddd;border:2px solid var(--ink);border-radius:99px;overflow:hidden}
+.line i{display:block;height:100%;background:#2FBF71;transition:width .8s}
+.st4{position:relative;display:grid;grid-template-columns:repeat(4,1fr);text-align:center}
+.stp .c{width:42px;height:42px;margin:0 auto;border-radius:50%;border:3px solid var(--ink);background:#eee;display:grid;place-items:center;font-size:18px;position:relative;z-index:1}
+.stp.done .c{background:#2FBF71;color:#fff;font-weight:700}
+.stp.now .c{background:var(--yellow);animation:pulse 1.4s infinite}
+.stp span{display:block;font-size:12px;font-weight:700;margin-top:4px}
+.stp small{display:block;font-size:11px;color:var(--mute)}
+.truck{position:absolute;top:-30px;font-size:26px;transform:translateX(-50%);animation:bob 1s ease-in-out infinite;z-index:2}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(255,210,63,.9)}50%{box-shadow:0 0 0 10px rgba(255,210,63,0)}}
+@keyframes bob{50%{transform:translateX(-50%) translateY(-5px)}}
+.cx{background:#ffe3e1;border:3px solid var(--ink);border-radius:10px;padding:10px 14px;font-weight:700;margin:14px 0 0}
+.eta{background:var(--cream);border:2px dashed var(--ink);border-radius:10px;padding:8px 12px;margin-top:14px;font-weight:700;font-size:14px}
+.more{margin-top:12px;border:3px solid var(--ink);background:#fff;border-radius:99px;padding:6px 16px;font:inherit;font-weight:700;cursor:pointer}
+.det{margin-top:14px;border-top:3px dashed var(--ink);padding-top:14px;display:grid;grid-template-columns:1.1fr 1fr;gap:20px}
+.det h3{font-family:var(--h);font-weight:400;font-size:15px;margin:0 0 10px}
+.log{list-style:none;margin:0 0 0 8px;padding:0 0 0 14px;border-left:3px solid var(--ink)}
+.log li{position:relative;padding:0 0 12px 14px;font-size:14px}
+.log li::before{content:"";position:absolute;left:-26px;top:3px;width:14px;height:14px;border-radius:50%;background:#fff;border:3px solid var(--ink)}
+.log li:first-child::before{background:#2FBF71}
+.log small{color:var(--mute);display:block}
+.sr{display:flex;justify-content:space-between;gap:10px;padding:3px 0;font-size:14px}
+.sr.t{border-top:2px solid var(--ink);margin-top:6px;padding-top:8px;font-weight:700}
+.empty{text-align:center;padding:50px 10px}.empty .e{font-size:60px}
+.cta{display:inline-block;margin-top:12px;background:var(--red);color:#fff;border:3px solid var(--ink);box-shadow:4px 4px 0 var(--ink);font-family:var(--h);padding:10px 24px;border-radius:99px;text-decoration:none}
+.note{text-align:center;color:var(--mute);font-size:12px}
+@media(max-width:700px){.det{grid-template-columns:1fr}.stp span{font-size:11px}}
+@media(prefers-reduced-motion:reduce){.truck,.stp.now .c{animation:none}}
+</style>
+</head>
+<body>
+<header>
+  <a class="logo" href="/" style="text-decoration:none">kimizo</a>
+  <div class="hl"><a href="/">Shop</a><a href="#" id="lo">Logout</a></div>
+</header>
+
+<main class="page">
+  <div class="top"><h1>My orders</h1><button class="rf" id="rf">↻ Refresh</button></div>
+  <div class="tabs" id="tabs"></div>
+  <div id="list"></div>
+  <p class="note" id="upd"></p>
+</main>
+
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const inr=n=>'₹'+Number(n).toLocaleString('en-IN');
+const tok=localStorage.getItem('kz_token');
+if(!tok)location.href='/login.html?next=/orders.html';
+const ST=['placed','packed','shipped','delivered'];
+const LBL={placed:'Order placed',packed:'Packed',shipped:'Shipped',delivered:'Delivered',cancelled:'Cancelled'};
+const ICO={placed:'📝',packed:'📦',shipped:'🚚',delivered:'🏠'};
+let O=[],P=[],tab='all',open=new Set(),first=true;
+const G=id=>P.find(p=>p.id==id);
+const pic=i=>{const p=G(i.id);return p?(p.img?`<img src="${esc(p.img)}" alt="">`:esc(p.e)):'📦'};
+const fmt=d=>new Date(d).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'});
+const hist=o=>{if(o.history&&o.history.length)return o.history;const h=[{status:'placed',at:o.createdAt,note:'Order received'}];if(o.status!=='placed')h.push({status:o.status,at:null,note:''});return h};
+const isActive=o=>o.status!=='delivered'&&o.status!=='cancelled';
+
+function card(o){
+  const h=hist(o),idx=ST.indexOf(o.status),cancelled=o.status==='cancelled',isOpen=open.has(o.id);
+  const qty=o.items.reduce((a,i)=>a+i.qty,0);
+  const steps=ST.map((s,i)=>{
+    const cls=cancelled?'':(i<idx||(i===idx&&s==='delivered'))?'done':i===idx?'now':'';
+    const e=h.find(x=>x.status===s);
+    return `<div class="stp ${cls}"><div class="c">${cls==='done'?'✓':ICO[s]}</div><span>${LBL[s]}</span><small>${e&&e.at?fmt(e.at):''}</small></div>`}).join('');
+  const pct=Math.max(idx,0)/3*100;
+  const eta=new Date(new Date(o.createdAt).getTime()+5*864e5).toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'});
+  const track=cancelled?`<div class="cx">❌ This order was cancelled.</div>`:
+    `<div class="tr"><div class="line"><i style="width:${pct}%"></i></div><span class="truck" style="left:calc(12.5% + ${pct*0.75}%)">${o.status==='delivered'?'🎁':'🚚'}</span><div class="st4">${steps}</div></div>`+
+    (o.status==='delivered'?'':`<div class="eta">📅 Expected delivery by ${eta}</div>`);
+  const det=isOpen?`<div class="det">
+    <div><h3>Tracking updates</h3><ul class="log">${[...h].reverse().map(e=>`<li><b>${LBL[e.status]||esc(e.status)}</b>${e.note?`<small>${esc(e.note)}</small>`:''}${e.at?`<small>${fmt(e.at)}</small>`:''}</li>`).join('')}</ul></div>
+    <div><h3>Order details</h3>
+      ${o.items.map(i=>`<div class="sr"><span>${esc(i.name)} × ${i.qty}</span><span>${inr(i.price*i.qty)}</span></div>`).join('')}
+      <div class="sr"><span>Shipping</span><span>${o.shipping?inr(o.shipping):'FREE'}</span></div>
+      <div class="sr t"><span>Total (pay on delivery)</span><span>${inr(o.total)}</span></div>
+      <p style="font-size:14px;margin:12px 0 0"><b>Delivering to</b><br>${esc(o.name)} · ${esc(o.phone)}<br>${esc(o.address)}</p>
+    </div></div>`:'';
+  return `<article class="oc"><div class="oh"><div><span class="id">Order #${o.id}</span><small>${fmt(o.createdAt)} · ${qty} item${qty>1?'s':''}</small></div>
+    <div style="text-align:right"><span class="pill s-${esc(o.status)}">${LBL[o.status]||esc(o.status)}</span><small style="margin-top:4px;font-weight:700;color:var(--ink)">${inr(o.total)}</small></div></div>
+    <div class="thumbs">${o.items.slice(0,6).map(i=>`<div class="pt" title="${esc(i.name)}">${pic(i)}${i.qty>1?`<em>×${i.qty}</em>`:''}</div>`).join('')}</div>
+    ${track}${det}
+    <button class="more" data-o="${o.id}">${isOpen?'Hide details ▴':'Track order ▾'}</button></article>`;
+}
+
+function render(){
+  const cnt={all:O.length,active:O.filter(isActive).length,delivered:O.filter(o=>o.status==='delivered').length,cancelled:O.filter(o=>o.status==='cancelled').length};
+  $('tabs').innerHTML=[['all','All'],['active','On the way'],['delivered','Delivered'],['cancelled','Cancelled']].map(([k,l])=>`<button data-t="${k}" class="${tab===k?'on':''}">${l} (${cnt[k]})</button>`).join('');
+  const L=O.filter(o=>tab==='all'||(tab==='active'?isActive(o):o.status===tab));
+  $('list').innerHTML=L.length?L.map(card).join(''):`<div class="empty"><div class="e">🛍️</div><h2>${O.length?'No orders here':'No orders yet'}</h2><a class="cta" href="/">Start shopping</a></div>`;
+}
+$('tabs').onclick=e=>{const t=e.target.dataset.t;if(t){tab=t;render()}};
+$('list').onclick=e=>{const b=e.target.closest('.more');if(!b)return;const id=+b.dataset.o;open.has(id)?open.delete(id):open.add(id);render()};
+$('rf').onclick=()=>load();
+$('lo').onclick=e=>{e.preventDefault();localStorage.removeItem('kz_token');localStorage.removeItem('kz_user');location.href='/'};
+
+async function load(){
+  try{
+    const [r,pr]=await Promise.all([fetch('/api/my-orders',{headers:{Authorization:'Bearer '+tok}}),fetch('/api/products')]);
+    if(r.status===401){localStorage.removeItem('kz_token');localStorage.removeItem('kz_user');location.href='/login.html?next=/orders.html';return}
+    O=await r.json();P=await pr.json();
+    if(first){first=false;const a=O.find(isActive)||O[0];if(a)open.add(a.id)}
+    render();
+    $('upd').textContent='Updated '+new Date().toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit'})+' · refreshes automatically every 30 seconds';
+  }catch(e){$('list').innerHTML='<div class="empty">Could not load your orders. Is the server running?</div>'}
+}
+if(tok){load();setInterval(load,30000)}
+</script>
+</body>
+</html>

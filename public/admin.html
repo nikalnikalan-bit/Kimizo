@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kimizo Admin v2 (upload)</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--red:#D8141C;--bg:#f7f1ee;--card:#fff;--ink:#1d1416;--mute:#6f6366;--line:#eadcd6;--tint:#fde9e6}
+@media(prefers-color-scheme:dark){:root{--bg:#181012;--card:#241a1d;--ink:#f6ecea;--mute:#b3a3a6;--line:#3a2a2e;--tint:#3a1c1f}}
+*{box-sizing:border-box}[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'DM Sans',system-ui,sans-serif}
+.logo{font-family:'Archivo Black',Impact,sans-serif;color:var(--red);font-size:26px;letter-spacing:-1px}
+input,select,textarea,button{font:inherit}
+input,select,textarea{width:100%;padding:9px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
+label{display:block;font-size:13px;color:var(--mute);margin:10px 0 4px}
+.btn{background:var(--red);color:#fff;border:0;padding:10px 18px;border-radius:8px;font-weight:700;cursor:pointer}
+.btn.o{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn.s{padding:5px 12px;font-size:13px}
+#login{max-width:360px;margin:15vh auto;background:var(--card);padding:28px;border-radius:16px;border:1px solid var(--line)}
+#err{color:var(--red);font-size:14px;min-height:20px}
+header{background:var(--card);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:16px;padding:10px 4vw;flex-wrap:wrap}
+header a{color:var(--mute);font-size:14px}
+.tabs{display:flex;gap:6px;margin-left:auto}
+.tabs button{border:0;background:none;color:var(--ink);padding:8px 16px;border-radius:99px;cursor:pointer;font-weight:500}
+.tabs button.on{background:var(--red);color:#fff}
+main{max-width:1000px;margin:20px auto;padding:0 4vw}
+.box{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:18px}
+.box h2{margin:0 0 6px;font-size:18px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 14px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);vertical-align:middle}
+.th{width:44px;height:44px;border-radius:8px;background:var(--tint);display:grid;place-items:center;font-size:24px;overflow:hidden}.th img{width:100%;height:100%;object-fit:cover}
+.ord{border-bottom:1px solid var(--line);padding:12px 0;display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;font-size:14px}
+.ord small{color:var(--mute)}
+.tw{overflow-x:auto}
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:99px;font-size:14px}
+@media(max-width:700px){.g2,.g3{grid-template-columns:1fr}}
+</style>
+<link rel="stylesheet" href="pop.css">
+</head>
+<body>
+
+<div id="app" hidden>
+<header>
+  <span class="logo">kimizo admin</span><a href="/" target="_blank">View store</a>
+  <div class="tabs" id="tabs">
+    <button data-t="products" class="on">Products</button><button data-t="orders">Orders</button><button data-t="settings">Settings</button><button data-t="out">Log out</button>
+  </div>
+</header>
+<main>
+<section id="t-products">
+  <div class="box">
+    <h2 id="ftitle">Add new product</h2>
+    <input type="hidden" id="pid">
+    <div class="g3">
+      <div><label>Product name *</label><input id="pn"></div>
+      <div><label>Category *</label><input id="pc" list="cats" placeholder="Toy Cars"><datalist id="cats"></datalist></div>
+      <div><label>Type (sub-category)</label><input id="ps" list="subsl" placeholder="SUV, Sedan, Sports..."><datalist id="subsl"></datalist></div>
+    </div>
+    <div class="g3">
+      <div><label>Origin *</label><select id="po"><option>Japan</option><option>Korea</option><option>China</option></select></div>
+      <div><label>Selling price ₹ *</label><input id="pp" type="number" min="1"></div>
+      <div><label>MRP ₹ (cut price)</label><input id="pm" type="number" min="1"></div>
+    </div>
+    <div class="g2">
+      <div><label>Emoji (used if no image)</label><input id="pe" placeholder="🎧"></div>
+      <div><label>Product image (optional)</label>
+        <input id="pf" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
+        <input type="hidden" id="pi">
+        <div id="prev" style="margin-top:8px;display:flex;align-items:center;gap:10px" hidden>
+          <div class="th" style="width:60px;height:60px"><img id="pimg" alt="Preview"></div>
+          <button type="button" class="btn o s" id="prm">Remove image</button>
+        </div>
+      </div>
+    </div>
+    <label>Product description (shown on the product page; new line = new line)</label>
+    <textarea id="pd" rows="4" maxlength="2000" placeholder="Material, size, what's in the box, how to use..."></textarea>
+    <p style="margin:14px 0 0"><button class="btn" id="save">Add product</button> <button class="btn o" id="cancel" hidden>Cancel edit</button></p>
+  </div>
+  <div class="box tw"><h2>All products (<span id="pcount">0</span>)</h2>
+    <table><thead><tr><th></th><th>Name</th><th>Category</th><th>Origin</th><th>Price</th><th></th></tr></thead><tbody id="plist"></tbody></table>
+  </div>
+</section>
+
+<section id="t-orders" hidden><div class="box"><h2>Orders</h2><div id="olist"></div></div></section>
+
+<section id="t-settings" hidden><div class="box">
+  <h2>Store settings</h2>
+  <div class="g2">
+    <div><label>Store name</label><input id="s_storeName"></div>
+    <div><label>Tagline</label><input id="s_tagline"></div>
+  </div>
+  <label>Homepage headline</label><input id="s_heroTitle">
+  <label>Homepage description</label><textarea id="s_heroText" rows="2"></textarea>
+  <label>Announcement bar (leave empty to hide)</label><input id="s_announcement" placeholder="Diwali sale! Extra 10% off">
+  <div class="g2">
+    <div><label>Contact phone</label><input id="s_phone"></div>
+    <div><label>Contact email</label><input id="s_email"></div>
+    <div><label>Shipping fee ₹</label><input id="s_shippingFee" type="number" min="0"></div>
+    <div><label>Free shipping above ₹ (0 = never free)</label><input id="s_freeAbove" type="number" min="0"></div>
+  </div>
+  <p style="margin:14px 0 0"><button class="btn" id="ssave">Save settings</button></p>
+</div></section>
+</main>
+</div>
+<div id="toast" hidden></div>
+
+<script>
+const TOKEN=localStorage.getItem('kz_token')||'';let PR=[];
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const inr=n=>'₹'+Number(n).toLocaleString('en-IN');
+const SK=['storeName','tagline','heroTitle','heroText','announcement','phone','email','shippingFee','freeAbove'];
+function toast(m){const t=$('toast');t.textContent=m;t.hidden=false;clearTimeout(toast.x);toast.x=setTimeout(()=>t.hidden=true,2000)}
+async function api(url,method='GET',body){
+  const r=await fetch(url,{method,headers:{'Content-Type':'application/json',Authorization:'Bearer '+TOKEN},body:body?JSON.stringify(body):undefined});
+  const d=await r.json().catch(()=>({}));
+  if((r.status===401||r.status===403)&&url!=='/api/admin/check')bye();
+  if(!r.ok)throw new Error(d.error||'Something went wrong');
+  return d;
+}
+function bye(){localStorage.removeItem('kz_token');localStorage.removeItem('kz_user');location.href='/login.html'}
+(async()=>{try{await api('/api/admin/check');$('app').hidden=false;loadProducts();loadSettings()}catch{bye()}})();
+
+$('tabs').onclick=e=>{
+  const t=e.target.dataset.t;if(!t)return;
+  if(t==='out'){bye();return}
+  document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
+  ['products','orders','settings'].forEach(x=>$('t-'+x).hidden=x!==t);
+  if(t==='orders')loadOrders();
+};
+
+/* Image upload */
+function showPrev(u){$('pi').value=u||'';$('prev').hidden=!u;if(u)$('pimg').src=u;$('pf').value=''}
+$('prm').onclick=()=>showPrev('');
+$('pf').onchange=async()=>{
+  const f=$('pf').files[0];if(!f)return;
+  if(f.size>5*1024*1024){toast('Image must be under 5 MB');$('pf').value='';return}
+  toast('Uploading...');
+  try{
+    const r=await fetch('/api/upload',{method:'POST',headers:{'Content-Type':f.type,Authorization:'Bearer '+TOKEN},body:f});
+    const d=await r.json();if(!r.ok)throw new Error(d.error||'Upload failed');
+    showPrev(d.url);toast('Image uploaded');
+  }catch(e){toast(e.message);$('pf').value=''}
+};
+
+/* Products */
+async function loadProducts(){
+  PR=await api('/api/products');
+  $('pcount').textContent=PR.length;
+  $('subsl').innerHTML=[...new Set(PR.map(p=>p.sub).filter(Boolean))].map(c=>`<option value="${esc(c)}">`).join('');
+  $('cats').innerHTML=[...new Set(PR.map(p=>p.c))].map(c=>`<option value="${esc(c)}">`).join('');
+  $('plist').innerHTML=PR.map(p=>`<tr><td><div class="th">${p.img?`<img src="${esc(p.img)}" alt="">`:esc(p.e)}</div></td><td>${esc(p.n)}</td><td>${esc(p.c)}${p.sub?' · '+esc(p.sub):''}</td><td>${esc(p.o)}</td><td>${inr(p.p)}${p.m>p.p?` <small style="color:var(--mute)"><s>${inr(p.m)}</s></small>`:''}</td><td style="white-space:nowrap"><button class="btn o s" data-edit="${p.id}">Edit</button> <button class="btn o s" data-del="${p.id}">Delete</button></td></tr>`).join('')||'<tr><td colspan="6">No products yet.</td></tr>';
+}
+function resetForm(){['pid','pn','pc','ps','pp','pm','pe','pi','pd'].forEach(i=>$(i).value='');$('ftitle').textContent='Add new product';$('save').textContent='Add product';$('cancel').hidden=true;showPrev('')}
+$('cancel').onclick=resetForm;
+$('save').onclick=async()=>{
+  const id=$('pid').value,b={n:$('pn').value,c:$('pc').value,sub:$('ps').value,o:$('po').value,p:$('pp').value,m:$('pm').value||$('pp').value,e:$('pe').value||'📦',img:$('pi').value,desc:$('pd').value};
+  try{await api(id?'/api/products/'+id:'/api/products',id?'PUT':'POST',b);toast(id?'Product updated':'Product added');resetForm();loadProducts()}
+  catch(e){toast(e.message)}
+};
+$('plist').onclick=async e=>{
+  const ed=e.target.dataset.edit,dl=e.target.dataset.del;
+  if(ed){const p=PR.find(x=>x.id==ed);$('pid').value=p.id;$('pn').value=p.n;$('pc').value=p.c;$('ps').value=p.sub||'';$('po').value=p.o;$('pp').value=p.p;$('pm').value=p.m;$('pe').value=p.e;$('pd').value=p.desc||'';showPrev(p.img);$('ftitle').textContent='Edit product';$('save').textContent='Update product';$('cancel').hidden=false;scrollTo({top:0,behavior:'smooth'})}
+  if(dl&&confirm('Delete this product?')){try{await api('/api/products/'+dl,'DELETE');toast('Product deleted');loadProducts()}catch(x){toast(x.message)}}
+};
+
+/* Orders */
+async function loadOrders(){
+  const O=await api('/api/orders');
+  $('olist').innerHTML=O.map(o=>{const last=(o.history||[]).slice(-1)[0];return `<div class="ord"><div><b>#${o.id}</b> · ${esc(o.name)} · ${esc(o.phone)}<br><small>${esc(o.address)}</small><br><small>${o.items.map(i=>esc(i.name)+' × '+i.qty).join(', ')}</small><br><small>${new Date(o.createdAt).toLocaleString('en-IN')}</small><br><small>Last update: ${last?esc(last.note||last.status)+' · '+new Date(last.at).toLocaleString('en-IN'):'-'}</small></div><div style="text-align:right;min-width:240px"><b>${inr(o.total)}</b> <small>(shipping ${inr(o.shipping||0)})</small><select data-oid="${o.id}" style="margin-top:6px">${['placed','packed','shipped','delivered','cancelled'].map(s=>`<option${s===o.status?' selected':''}>${s}</option>`).join('')}</select><input data-note="${o.id}" maxlength="140" placeholder="Tracking note, e.g. Reached Chennai hub" style="margin-top:6px"><button class="btn s" data-upd="${o.id}" style="margin-top:6px">Update tracking</button></div></div>`}).join('')||'<p>No orders yet.</p>';
+}
+$('olist').onclick=async e=>{
+  const id=e.target.dataset.upd;if(!id)return;
+  const status=document.querySelector(`select[data-oid="${id}"]`).value,note=document.querySelector(`input[data-note="${id}"]`).value;
+  try{await api('/api/orders/'+id,'PATCH',{status,note});toast('Tracking updated');loadOrders()}catch(x){toast(x.message)}
+};
+
+/* Settings */
+async function loadSettings(){const s=await fetch('/api/settings').then(r=>r.json());SK.forEach(k=>$('s_'+k).value=s[k])}
+$('ssave').onclick=async()=>{const b={};SK.forEach(k=>b[k]=$('s_'+k).value);try{await api('/api/settings','PUT',b);toast('Settings saved')}catch(e){toast(e.message)}};
+</script>
+</body>
+</html>

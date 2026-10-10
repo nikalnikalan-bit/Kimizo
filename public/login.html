@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Login – Kimizo</title>
+<link href="https://fonts.googleapis.com/css2?family=Bowlby+One&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--red:#E4231F;--yellow:#FFD23F;--ink:#111;--cream:#F6E7C1;--mute:#5a4a44}
+*{box-sizing:border-box}[hidden]{display:none!important}
+body{margin:0;min-height:100vh;background:radial-gradient(rgba(228,35,31,.16) 1.6px,transparent 1.8px) 0 0/16px 16px,var(--cream);color:var(--ink);font-family:'DM Sans',system-ui,sans-serif;display:grid;place-items:center;padding:20px}
+.wrap{display:grid;grid-template-columns:.85fr 1.15fr;max-width:900px;width:100%;border:4px solid var(--ink);border-radius:20px;overflow:hidden;background:#fff;box-shadow:8px 8px 0 var(--ink)}
+.side{background:var(--red);color:#fff;padding:36px 28px;display:flex;flex-direction:column;justify-content:center;gap:12px}
+.logo{font-family:'Bowlby One',Impact,sans-serif;font-size:40px;letter-spacing:-1.5px;text-shadow:3px 3px 0 var(--ink)}
+.side h1{margin:0;font-size:22px;line-height:1.25}.side p{margin:0;opacity:.95}
+.card{padding:26px}
+.gwrap{position:relative;height:44px}
+.gb{width:100%;height:44px;display:flex;align-items:center;justify-content:center;gap:10px;background:var(--yellow);border:3px solid var(--ink);border-radius:12px;padding:0 10px;font:inherit;font-weight:700;font-size:15px;color:var(--ink);cursor:pointer;box-shadow:4px 4px 0 var(--ink);transition:transform .1s,box-shadow .1s}
+.gi{width:30px;height:30px;border-radius:50%;background:#fff;border:2px solid var(--ink);display:grid;place-items:center}
+.gi svg{width:17px;height:17px;display:block}
+.gwrap:hover .gb{transform:translate(-2px,-2px);box-shadow:6px 6px 0 var(--ink)}
+.gwrap:active .gb{transform:translate(4px,4px);box-shadow:0 0 0 var(--ink)}
+#gover{position:absolute;left:0;top:0;z-index:2;opacity:.01;overflow:hidden;transform-origin:0 0}
+.or{display:flex;align-items:center;gap:10px;color:var(--mute);font-size:13px;margin:14px 0 6px}.or::before,.or::after{content:"";flex:1;height:2px;background:var(--ink);opacity:.2}
+.tabs{display:flex;gap:6px;margin:6px 0 4px}
+.tabs button{flex:1;border:3px solid var(--ink);background:#fff;border-radius:99px;padding:6px 4px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;transition:transform .1s,box-shadow .1s,background .1s}
+.tabs button.on{background:var(--yellow);box-shadow:2px 2px 0 var(--ink)}
+.tabs button:hover{transform:translate(-2px,-2px);box-shadow:4px 4px 0 var(--ink);background:#FFF1B8}
+.tabs button.on:hover{background:var(--yellow)}
+.tabs button:active{transform:translate(2px,2px);box-shadow:0 0 0 var(--ink)}
+label{display:block;font-size:13px;font-weight:700;margin:12px 0 4px}
+input{width:100%;padding:10px 12px;border:3px solid var(--ink);border-radius:10px;background:#fff;color:var(--ink);font:inherit;transition:box-shadow .1s,background .1s}
+input:hover{background:#FFFBEA}
+input:focus{box-shadow:4px 4px 0 var(--ink);background:#fff}
+input:focus-visible,button:focus-visible{outline:3px solid #1B2A6B;outline-offset:2px}
+.ph{display:flex;gap:8px}.ph span{border:3px solid var(--ink);border-radius:10px;padding:10px 12px;background:var(--cream);font-weight:700}
+.msg{font-size:14px;min-height:20px;margin:10px 0 0;font-weight:700}.msg.err{color:#B5120F}.msg.ok{color:#14803c}
+.go{width:100%;background:var(--red);color:#fff;border:3px solid var(--ink);box-shadow:4px 4px 0 var(--ink);padding:12px;border-radius:10px;font-family:'Bowlby One',sans-serif;font-size:15px;cursor:pointer;margin-top:12px;transition:transform .1s,box-shadow .1s,background .1s}
+.go:hover:not(:disabled){transform:translate(-2px,-2px);box-shadow:6px 6px 0 var(--ink);background:#F02A25}
+.go:active:not(:disabled){transform:translate(4px,4px);box-shadow:0 0 0 var(--ink)}
+.go:disabled{opacity:.6;cursor:wait}
+.lnk{background:none;border:0;padding:1px 5px;margin:-1px -5px;border-radius:6px;font:inherit;font-weight:700;color:var(--red);text-decoration:underline;cursor:pointer;transition:background .1s,color .1s}
+.lnk:hover{background:var(--yellow);color:var(--ink);text-decoration:none;box-shadow:2px 2px 0 var(--ink)}
+.lnk:active{transform:translate(1px,1px);box-shadow:none}
+.lnk:disabled{opacity:.6;text-decoration:none;cursor:default}
+.lnk:disabled:hover{background:none;box-shadow:none;color:var(--red)}
+.row{display:flex;justify-content:space-between;gap:10px;margin-top:10px;font-size:13px}
+.guest{display:block;text-align:center;margin-top:16px;color:var(--mute);font-size:14px;transition:color .1s}
+.guest:hover{color:var(--ink);text-decoration-color:var(--red);text-decoration-thickness:3px;text-underline-offset:3px}
+@media(max-width:760px){.wrap{grid-template-columns:1fr}.side{padding:22px}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="side"><div class="logo">kimizo</div><h1>Global finds. Closer to you.</h1><p>Log in to shop trending products from Japan, Korea and China.</p></div>
+  <div class="card">
+    <div class="gwrap" id="gwrap"><button type="button" class="gb" id="gfake"><span class="gi"><svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg></span> Continue with Google</button><div id="gover"></div></div>
+    <div class="or">or</div>
+    <div class="tabs" id="tabs"><button data-p="pe" class="on">Email</button><button data-p="ps">Create account</button></div>
+
+    <!-- EMAIL LOGIN -->
+    <section id="pe">
+      <form id="fe">
+        <label for="le">Email</label><input id="le" type="email" autocomplete="username" required>
+        <label for="lp">Password</label><input id="lp" type="password" autocomplete="current-password" required>
+        <p class="msg" id="me"></p>
+        <button class="go">Log in</button>
+      </form>
+    </section>
+
+    <!-- SIGN UP -->
+    <section id="ps" hidden>
+      <form id="fs">
+        <label for="sn">Full name</label><input id="sn" autocomplete="name" required>
+        <label for="sp">Mobile number</label><div class="ph"><span>+91</span><input id="sp" type="tel" inputmode="numeric" maxlength="10" required></div>
+        <label for="se">Email</label><input id="se" type="email" autocomplete="email" required>
+        <label for="sw">Password (min 6 characters)</label><input id="sw" type="password" minlength="6" autocomplete="new-password" required>
+        <p class="msg" id="ms"></p>
+        <button class="go">Create account</button>
+      </form>
+    </section>
+
+    <a class="guest" href="/">Continue browsing as guest</a>
+  </div>
+</main>
+
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const next = new URLSearchParams(location.search).get('next');
+const safe = n => n && n.startsWith('/') && !n.startsWith('//') ? n : '/';
+const go = u => location.href = u.role === 'admin' ? '/admin' : safe(next);
+const digits = v => v.replace(/\D/g, '');
+
+function msg(id, t, ok) {
+  const e = $(id);
+  if (!e) return;
+  e.textContent = t || '';
+  e.className = 'msg' + (t ? (ok ? ' ok' : ' err') : '');
+}
+
+async function post(url, body) {
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const e = new Error(d.error || d.message || `Request failed (${r.status})`);
+    e.data = d;
+    e.status = r.status;
+    throw e;
+  }
+  return d;
+}
+
+function done(d) {
+  if (!d || !d.token || !d.user) throw new Error('Server did not return a valid login session.');
+  localStorage.setItem('kz_token', d.token);
+  localStorage.setItem('kz_user', JSON.stringify(d.user));
+  go(d.user);
+}
+
+async function run(btn, fn, errId) {
+  const old = btn ? btn.textContent : '';
+  if (btn) btn.disabled = true;
+  try {
+    await fn();
+  } catch (e) {
+    msg(errId, e.message || 'Something went wrong.');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = old;
+    }
+  }
+}
+
+const sub = e => e.submitter || e.target.querySelector('.go');
+const PANELS = ['pe', 'ps'];
+function show(p) {
+  PANELS.forEach(x => $(x).hidden = x !== p);
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.p === p));
+  ['me', 'ms'].forEach(i => msg(i, ''));
+}
+$('tabs').onclick = e => { if (e.target.dataset.p) show(e.target.dataset.p); };
+
+/* Email login and account registration */
+$('fe').onsubmit = e => {
+  e.preventDefault();
+  run(sub(e), async () => done(await post('/api/auth/login', { email: $('le').value.trim(), password:$('lp').value })), 'me');
+};
+$('fs').onsubmit = e => {
+  e.preventDefault();
+  run(sub(e), async () => done(await post('/api/auth/register', { name: $('sn').value.trim(), phone: digits($('sp').value), email: $('se').value.trim(), password:$('sw').value })), 'ms');
+};
+
+/* Google login */
+let gMsg = 'Checking Google login... try again in a second.';
+$('gfake').onclick = () => { show('pe'); msg('me', gMsg); };
+
+async function setupGoogle() {
+  const r = await fetch('/api/auth/config');
+  const c = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(c.error || 'Could not load Google config.');
+  if (!c.google) {
+    gMsg = 'GOOGLE_CLIENT_ID is missing in .env. Add it and restart the server.';
+    return;
+  }
+  const s = document.createElement('script');
+  s.src = 'https://accounts.google.com/gsi/client';
+  s.async = true;
+  s.onerror = () => { gMsg = 'Could not load Google login. Check your internet connection.'; };
+  s.onload = () => {
+    google.accounts.id.initialize({
+      client_id: c.google,
+      callback: async response => {
+        try {
+          done(await post('/api/auth/google', { credential: response.credential }));
+        } catch (e) {
+          msg('me', e.message);
+        }
+      }
+    });
+    const gw = $('gwrap'), ov =$('gover'), width = Math.max(200, Math.min(400, gw.offsetWidth));
+    ov.style.width = width + 'px';
+    ov.style.height = '44px';
+    google.accounts.id.renderButton(ov, { theme: 'outline', size: 'large', text: 'continue_with', shape: 'rectangular', width });
+    const fit = () => { ov.style.transform = `scale(${gw.offsetWidth / width},1)`; };
+    fit();
+    addEventListener('resize', fit);
+  };
+  document.head.appendChild(s);
+}
+
+(async function init() {
+  setupGoogle().catch(e => { gMsg = e.message; });
+  const t = localStorage.getItem('kz_token');
+  if (t) {
+    fetch('/api/auth/me', { headers: { Authorization: 'Bearer ' + t } })
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(go)
+      .catch(() => {
+        localStorage.removeItem('kz_token');
+        localStorage.removeItem('kz_user');
+      });
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kimizo – Global finds. Closer to you.</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <span class="logo">kimizo</span>
+  <div class="search"><input id="q" placeholder="Search for unique finds..." aria-label="Search products"><button type="button">Search</button></div>
+  <div id="auth"></div>
+  <button class="cartbtn" id="cb" aria-label="Open cart">🛒<b id="cc">0</b></button>
+</header>
+<nav id="nav"></nav>
+
+<section class="hero">
+  <div>
+    <h1>Trending global products, now in India</h1>
+    <p>Carefully sourced from Japan, Korea and China to bring you unique, high-quality and affordable products.</p>
+    <button class="cta" onclick="document.getElementById('shop').scrollIntoView({behavior:'smooth'})">Shop now</button>
+  </div>
+  <div class="flags" aria-hidden="true">🗼🏯🏮</div>
+</section>
+
+<section class="perks">
+  <div>🌐<br><b>Authentic global finds</b></div>
+  <div>🛡️<br><b>Quality you can trust</b></div>
+  <div>🚚<br><b>Safe and fast delivery</b></div>
+  <div>🏷️<br><b>Great prices</b></div>
+</section>
+
+<div class="bar" id="shop">
+  <h2 id="ttl">All products</h2>
+  <div class="chips" id="chips"></div>
+  <select id="sort" aria-label="Sort"><option value="0">Featured</option><option value="1">Price: low to high</option><option value="2">Price: high to low</option></select>
+</div>
+<div class="grid" id="grid"></div>
+
+<footer><span class="logo" style="color:#fff">kimizo</span><br>Global finds. Closer to you. · Discover a bigger world at Kimizo</footer>
+
+<div class="veil" id="veil"></div>
+<aside class="drawer" id="dr" aria-label="Cart">
+  <header><b>Your cart</b><button class="cartbtn" id="cx" aria-label="Close cart">✕</button></header>
+  <div class="items" id="items"></div>
+  <div class="foot"><small id="ship" style="display:block;color:var(--mute);margin-bottom:6px"></small><div class="t"><span>Total</span><span id="tot">₹0</span></div><button id="co">Checkout</button></div>
+</aside>
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
