@@ -210,6 +210,13 @@ app.put('/api/settings', admin, async (req, res) => {
   res.json(cur);
 });
 app.get('/api/admin/check', admin, (req, res) => res.json({ ok: true }));
+// Shows only true/false (never the values) so you can confirm env variables reached this deployment. Open /api/env-check
+app.get('/api/env-check', (req, res) => res.json({
+  onVercel: !!process.env.VERCEL,
+  blobToken: !!process.env.BLOB_READ_WRITE_TOKEN,
+  razorpay: !!(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET),
+  driveFolder: !!process.env.GOOGLE_DRIVE_FOLDER_ID
+}));
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
 
 // ---------- Products ----------
