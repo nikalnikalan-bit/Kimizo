@@ -4,7 +4,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const { hashPassword, verifyPassword, signToken, verifyToken } = require('./auth');
-const { readFromDrive, writeToDrive } = require('./drive-db');
+const { readFromDrive, writeToDrive, readFromDriveStrict, updateDriveFile } = require('./drive-db');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -155,37 +155,84 @@ const sniff = b => {
   if (b.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'png';
   if (b.slice(0, 4).toString() === 'GIF8') return 'gif';
   if (b.slice(0, 4).toString() === 'RIFF' && b.slice(8, 12).toString() === 'WEBP') return 'webp';
+  if (b.slice(4, 8).toString() === 'ftyp' && /^avi[fs]$/.test(b.slice(8, 12).toString())) return 'avif';
   return null;
 };
+const MIME = { jpg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif' };
+
+// ---- Images stored in Google Drive (one file: images.json in your Drive folder) ----
+// { "<id>.webp": { t: "image/webp", d: "<base64>" }, ... }   served from /api/img/<id>
+let imgStore = null, imgLock = Promise.resolve();
+const imgLoad = async () => {
+  if (imgStore) return imgStore;
+  const d = await readFromDriveStrict('images');           // throws on error, never treats an error as "empty"
+  if (d === null) throw new Error('images.json is not in your Drive folder. Create an empty file named images.json (content: {}) in that folder once.');
+  if (d === '' || d === undefined) imgStore = {};
+  else if (typeof d === 'object' && !Array.isArray(d)) imgStore = d;
+  else throw new Error('images.json in Drive is not valid. It must contain {}');
+  return imgStore;
+};
+const withImgLock = fn => { const run = imgLock.then(fn); imgLock = run.catch(() => {}); return run; };   // one write at a time
+const driveImages = () => !!process.env.GOOGLE_DRIVE_FOLDER_ID && !process.env.BLOB_READ_WRITE_TOKEN;
+const IMG_MAX_TOTAL = 30 * 1024 * 1024;   // keep images.json under ~30 MB
+
 const dropFile = u => {
   if (typeof u !== 'string') return;
+  if (u.startsWith('/api/img/')) {
+    const id = path.basename(u);
+    withImgLock(async () => {
+      const st = await imgLoad();
+      if (!Object.prototype.hasOwnProperty.call(st, id)) return;
+      const keep = st[id]; delete st[id];
+      try { await updateDriveFile('images', st); } catch (e) { st[id] = keep; throw e; }
+    }).catch(e => console.error('Image cleanup failed:', e.message));
+    return;
+  }
   if (u.startsWith('/uploads/')) { fs.unlink(path.join(UP, path.basename(u)), () => {}); return; }
   if (u.includes('.blob.vercel-storage.com/')) { try { require('@vercel/blob').del(u).catch(() => {}); } catch (_) {} }
 };
 
+app.get('/api/img/:id', async (req, res) => {
+  try {
+    const st = await imgLoad(), id = req.params.id;
+    if (!Object.prototype.hasOwnProperty.call(st, id)) return res.status(404).end();
+    res.set({ 'Content-Type': st[id].t, 'Cache-Control': 'public, max-age=31536000, s-maxage=31536000, immutable' });
+    res.send(Buffer.from(st[id].d, 'base64'));
+  } catch (e) { console.error('Image read failed:', e.message); res.status(500).end(); }
+});
+
 app.post('/api/upload', admin,
-  express.raw({ type: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'], limit: '4mb' }),
+  express.raw({ type: ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif'], limit: '4mb' }),
   async (req, res) => {
     const ext = Buffer.isBuffer(req.body) && sniff(req.body);
-    if (!ext) return res.status(400).json({ error: 'Invalid image. Please try another file.' });
+    if (!ext) return res.status(400).json({ error: 'Invalid image. Use JPG, PNG, WEBP, GIF or AVIF.' });
     const name = Date.now() + '-' + require('crypto').randomBytes(4).toString('hex') + '.' + ext;
-    const mime = { jpg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp' }[ext];
     try {
-      // Vercel (and any host with a read-only disk): store in Vercel Blob
+      // 1) optional: Vercel Blob (only if BLOB_READ_WRITE_TOKEN is set)
       if (process.env.BLOB_READ_WRITE_TOKEN) {
         const { put } = require('@vercel/blob');
-        const blob = await put('products/' + name, req.body, { access: 'public', contentType: mime, addRandomSuffix: false });
+        const blob = await put('products/' + name, req.body, { access: 'public', contentType: MIME[ext], addRandomSuffix: false });
         return res.status(201).json({ url: blob.url });
       }
-      // Local development: save to public/uploads
+      // 2) Google Drive (images.json)
+      if (driveImages()) {
+        if (req.body.length > 1.5 * 1024 * 1024) return res.status(400).json({ error: 'Image is too big. Please use a smaller image (max 1.5 MB).' });
+        const url = await withImgLock(async () => {
+          const st = await imgLoad();
+          const used = Object.values(st).reduce((n, x) => n + (x.d ? x.d.length : 0), 0);
+          if (used + req.body.length * 1.34 > IMG_MAX_TOTAL) throw new Error('Image storage is full. Delete unused products/images first.');
+          st[name] = { t: MIME[ext], d: req.body.toString('base64') };
+          try { await updateDriveFile('images', st); } catch (e) { delete st[name]; throw e; }
+          return '/api/img/' + name;
+        });
+        return res.status(201).json({ url });
+      }
+      // 3) local development without Drive: save to public/uploads
       fs.writeFileSync(path.join(UP, name), req.body);
       res.status(201).json({ url: '/uploads/' + name });
     } catch (e) {
       console.error('Upload failed:', e.message);
-      // token missing -> storage not set up; token present but upload failed -> show the real reason
-      res.status(500).json({ error: (process.env.VERCEL && !process.env.BLOB_READ_WRITE_TOKEN)
-        ? 'Image storage not set up. Add Vercel Blob to this project (BLOB_READ_WRITE_TOKEN).'
-        : 'Upload failed: ' + e.message });
+      res.status(500).json({ error: 'Upload failed: ' + e.message });
     }
   });
 
@@ -215,7 +262,8 @@ app.get('/api/env-check', (req, res) => res.json({
   onVercel: !!process.env.VERCEL,
   blobToken: !!process.env.BLOB_READ_WRITE_TOKEN,
   razorpay: !!(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET),
-  driveFolder: !!process.env.GOOGLE_DRIVE_FOLDER_ID
+  driveFolder: !!process.env.GOOGLE_DRIVE_FOLDER_ID,
+  imageStorage: process.env.BLOB_READ_WRITE_TOKEN ? 'vercel-blob' : (process.env.GOOGLE_DRIVE_FOLDER_ID ? 'google-drive' : 'local-disk')
 }));
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
 

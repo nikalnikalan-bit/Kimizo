@@ -135,16 +135,20 @@ $('tabs').onclick=e=>{
 /* Image upload */
 function showPrev(u){$('pi').value=u||'';$('prev').hidden=!u;if(u)$('pimg').src=u;$('pf').value=''}
 $('prm').onclick=()=>showPrev('');
-/* Convert any browser-readable image to a small WEBP/JPEG (max 1200px) before upload */
+/* Convert ANY image the browser can open (PNG, JPG, WEBP, AVIF, GIF, BMP, SVG, HEIC on iPhone/Safari...) to a small WEBP (max 1000px, ~300 KB) before upload */
 async function prepImage(f){
-  if(f.type==='image/gif'&&f.size<=4*1024*1024)return f; // keep animated GIFs as they are
-  const img=await new Promise((ok,no)=>{const i=new Image();const u=URL.createObjectURL(f);i.onload=()=>{URL.revokeObjectURL(u);ok(i)};i.onerror=()=>{URL.revokeObjectURL(u);no(new Error("This image format can't be read by your browser. Please use JPG, PNG, WEBP, AVIF or GIF."))};i.src=u});
-  const w0=img.naturalWidth||800,h0=img.naturalHeight||800,k=Math.min(1,1200/Math.max(w0,h0));
+  if(f.type==='image/gif'&&f.size<=1024*1024)return f; // keep small animated GIFs as they are
+  const img=await new Promise((ok,no)=>{const i=new Image();const u=URL.createObjectURL(f);i.onload=()=>{URL.revokeObjectURL(u);ok(i)};i.onerror=()=>{URL.revokeObjectURL(u);no(new Error("Your browser can't open this image format. Please convert it to JPG or PNG and try again."))};i.src=u});
+  const w0=img.naturalWidth||800,h0=img.naturalHeight||800,k=Math.min(1,1000/Math.max(w0,h0));
   const c=document.createElement('canvas');c.width=Math.max(1,Math.round(w0*k));c.height=Math.max(1,Math.round(h0*k));
   const x=c.getContext('2d');x.drawImage(img,0,0,c.width,c.height);
   const to=(t,q)=>new Promise(r=>c.toBlob(r,t,q));
-  let blob=await to('image/webp',.85);
-  if(!blob||blob.type!=='image/webp'){x.globalCompositeOperation='destination-over';x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);blob=await to('image/jpeg',.88)}
+  let blob=null;
+  for(const q of [.85,.75,.65,.5,.4]){blob=await to('image/webp',q);if(!blob||blob.type!=='image/webp')break;if(blob.size<=300*1024)break}
+  if(!blob||blob.type!=='image/webp'){ // very old browsers without WEBP export: use JPEG on a white background
+    x.globalCompositeOperation='destination-over';x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);
+    for(const q of [.85,.7,.55,.4]){blob=await to('image/jpeg',q);if(blob&&blob.size<=300*1024)break}
+  }
   if(!blob)throw new Error('Could not process this image');
   return blob;
 }
@@ -154,7 +158,7 @@ $('pf').onchange=async()=>{
   toast('Uploading...');
   try{
     const blob=await prepImage(f);
-    if(blob.size>4*1024*1024)throw new Error('Image is too large even after compression');
+    if(blob.size>1.4*1024*1024)throw new Error('Image is too large even after compression');
     const r=await fetch('/api/upload',{method:'POST',headers:{'Content-Type':blob.type,Authorization:'Bearer '+TOKEN},body:blob});
     const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'Upload failed');
     showPrev(d.url);toast('Image uploaded');

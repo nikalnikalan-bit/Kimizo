@@ -85,4 +85,30 @@ async function writeToDrive(filename, data) {
   }
 }
 
-module.exports = { readFromDrive, writeToDrive };
+// Strict read: returns null if the file does not exist, THROWS on any error (so we never mistake an error for "empty")
+async function readFromDriveStrict(filename) {
+  const fileId = await getFileId(filename);
+  if (!fileId) return null;
+  const res = await drive.files.get(
+    { fileId: fileId, alt: 'media', supportsAllDrives: true },
+    { responseType: 'json' }
+  );
+  return res.data;
+}
+
+// Update an EXISTING file only. Service accounts have no storage quota, so they cannot create files.
+async function updateDriveFile(filename, data) {
+  const fileId = await getFileId(filename);
+  if (!fileId) {
+    throw new Error(`${filename}.json is not in the Drive folder. Create it once manually (content: {}) - service accounts cannot create files.`);
+  }
+  const bufferStream = new stream.PassThrough();
+  bufferStream.end(JSON.stringify(data));
+  await drive.files.update({
+    fileId: fileId,
+    media: { mimeType: 'application/json', body: bufferStream },
+    supportsAllDrives: true,
+  });
+}
+
+module.exports = { readFromDrive, writeToDrive, readFromDriveStrict, updateDriveFile };
