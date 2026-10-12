@@ -372,11 +372,29 @@ app.get('/api/orders', admin, (req, res) => res.json(read('orders').filter(o => 
 app.patch('/api/orders/:id', admin, async (req, res) => {
   const orders = read('orders'), o = orders.find(x => x.id == req.params.id);
   if (!o) return res.status(404).json({ error: 'Order not found' });
+  const body = req.body || {};
   const ok = ['placed', 'packed', 'shipped', 'delivered', 'cancelled'];
-  if (!ok.includes(req.body.status)) return res.status(400).json({ error: 'status must be one of ' + ok.join(', ') });
-  const note = String(req.body.note || '').trim().slice(0, 140);
-  o.status = req.body.status;
-  o.history = [...(o.history || []), { status: o.status, at: new Date().toISOString(), note }];
+  if (body.status === undefined && body.shipping === undefined) return res.status(400).json({ error: 'Nothing to update' });
+
+  // validate everything first, then apply
+  if (body.status !== undefined && !ok.includes(body.status)) return res.status(400).json({ error: 'status must be one of ' + ok.join(', ') });
+  let ship;
+  if (body.shipping !== undefined) {
+    if (o.payment && o.payment.status === 'paid') return res.status(400).json({ error: 'Shipping cannot be changed for orders already paid online' });
+    ship = Number(body.shipping);
+    if (body.shipping === '' || !isFinite(ship) || ship < 0 || ship > 100000) return res.status(400).json({ error: 'Enter a valid shipping amount (0 or more)' });
+    ship = Math.round(ship * 100) / 100;
+  }
+
+  if (body.status !== undefined) {
+    const note = String(body.note || '').trim().slice(0, 140);
+    o.status = body.status;
+    o.history = [...(o.history || []), { status: o.status, at: new Date().toISOString(), note }];
+  }
+  if (ship !== undefined) {
+    const sub = typeof o.subtotal === 'number' ? o.subtotal : o.items.reduce((m, i) => m + i.price * i.qty, 0);
+    o.subtotal = sub; o.shipping = ship; o.total = Math.round((sub + ship) * 100) / 100;
+  }
   await write('orders', orders);
   res.json(o);
 });

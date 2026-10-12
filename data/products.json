@@ -5,10 +5,11 @@
     "e": "🎧",
     "c": "Electronics",
     "o": "Korea",
-    "p": 1499,
+    "p": 599,
     "m": 2299,
     "img": "/uploads/1791367248422-00512e4e.png",
-    "sub": "Headphones"
+    "sub": "Headphones",
+    "desc": ""
   },
   {
     "id": 2,
@@ -16,9 +17,11 @@
     "e": "📷",
     "c": "Electronics",
     "o": "Japan",
-    "p": 3299,
+    "p": 1,
     "m": 4499,
-    "sub": "Cameras"
+    "sub": "Cameras",
+    "img": "",
+    "desc": ""
   },
   {
     "id": 3,

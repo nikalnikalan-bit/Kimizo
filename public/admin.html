@@ -182,11 +182,24 @@ $('plist').onclick=async e=>{
 };
 
 /* Orders */
+const isPaid=o=>o.payment&&o.payment.status==='paid';
+const shipBox=o=>`<div style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--line);display:flex;gap:6px;align-items:center;justify-content:flex-end;flex-wrap:wrap">
+  <span style="font-size:13px;color:var(--mute);white-space:nowrap">Shipping ₹</span>
+  <input type="number" min="0" step="1" data-ship="${o.id}" value="${Number(o.shipping||0)}" style="width:90px"${isPaid(o)?' disabled':''}>
+  <button class="btn o s" data-saveship="${o.id}"${isPaid(o)?' disabled':''}>Save shipping</button>
+  ${isPaid(o)?'<small style="width:100%">Locked – customer already paid online</small>':''}</div>`;
 async function loadOrders(){
   const O=await api('/api/orders');
-  $('olist').innerHTML=O.map(o=>{const last=(o.history||[]).slice(-1)[0];return `<div class="ord"><div><b>#${o.id}</b> · ${esc(o.name)} · ${esc(o.phone)}<br><small>${esc(o.address)}</small><br><small>${o.items.map(i=>esc(i.name)+' × '+i.qty).join(', ')}</small><br><small>${new Date(o.createdAt).toLocaleString('en-IN')}</small><br><small>Last update: ${last?esc(last.note||last.status)+' · '+new Date(last.at).toLocaleString('en-IN'):'-'}</small></div><div style="text-align:right;min-width:240px"><b>${inr(o.total)}</b> <small>(shipping ${inr(o.shipping||0)})</small><br><small style="color:${o.payment&&o.payment.status==='paid'?'#2FBF71':'var(--mute)'}">${o.payment&&o.payment.status==='paid'?'✓ Paid online · '+esc(o.payment.rzpPaymentId||''):'Cash on delivery'}</small><select data-oid="${o.id}" style="margin-top:6px">${['placed','packed','shipped','delivered','cancelled'].map(s=>`<option${s===o.status?' selected':''}>${s}</option>`).join('')}</select><input data-note="${o.id}" maxlength="140" placeholder="Tracking note, e.g. Reached Chennai hub" style="margin-top:6px"><button class="btn s" data-upd="${o.id}" style="margin-top:6px">Update tracking</button></div></div>`}).join('')||'<p>No orders yet.</p>';
+  $('olist').innerHTML=O.map(o=>{const last=(o.history||[]).slice(-1)[0];return `<div class="ord"><div><b>#${o.id}</b> · ${esc(o.name)} · ${esc(o.phone)}<br><small>${esc(o.address)}</small><br><small>${o.items.map(i=>esc(i.name)+' × '+i.qty).join(', ')}</small><br><small>${new Date(o.createdAt).toLocaleString('en-IN')}</small><br><small>Last update: ${last?esc(last.note||last.status)+' · '+new Date(last.at).toLocaleString('en-IN'):'-'}</small></div><div style="text-align:right;min-width:240px"><b>${inr(o.total)}</b> <small>(shipping ${inr(o.shipping||0)})</small><br><small style="color:${o.payment&&o.payment.status==='paid'?'#2FBF71':'var(--mute)'}">${o.payment&&o.payment.status==='paid'?'✓ Paid online · '+esc(o.payment.rzpPaymentId||''):'Cash on delivery'}</small><select data-oid="${o.id}" style="margin-top:6px">${['placed','packed','shipped','delivered','cancelled'].map(s=>`<option${s===o.status?' selected':''}>${s}</option>`).join('')}</select><input data-note="${o.id}" maxlength="140" placeholder="Tracking note, e.g. Reached Chennai hub" style="margin-top:6px"><button class="btn s" data-upd="${o.id}" style="margin-top:6px">Update tracking</button>${shipBox(o)}</div></div>`}).join('')||'<p>No orders yet.</p>';
 }
 $('olist').onclick=async e=>{
+  const sid=e.target.dataset.saveship;
+  if(sid){
+    const v=document.querySelector(`input[data-ship="${sid}"]`).value;
+    if(v===''||Number(v)<0){toast('Enter a valid shipping amount');return}
+    try{const o=await api('/api/orders/'+sid,'PATCH',{shipping:Number(v)});toast('Shipping saved · new total '+inr(o.total));loadOrders()}catch(x){toast(x.message)}
+    return;
+  }
   const id=e.target.dataset.upd;if(!id)return;
   const status=document.querySelector(`select[data-oid="${id}"]`).value,note=document.querySelector(`input[data-note="${id}"]`).value;
   try{await api('/api/orders/'+id,'PATCH',{status,note});toast('Tracking updated');loadOrders()}catch(x){toast(x.message)}
