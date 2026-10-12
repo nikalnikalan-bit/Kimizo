@@ -182,7 +182,8 @@ app.post('/api/upload', admin,
       res.status(201).json({ url: '/uploads/' + name });
     } catch (e) {
       console.error('Upload failed:', e.message);
-      res.status(500).json({ error: process.env.VERCEL
+      // token missing -> storage not set up; token present but upload failed -> show the real reason
+      res.status(500).json({ error: (process.env.VERCEL && !process.env.BLOB_READ_WRITE_TOKEN)
         ? 'Image storage not set up. Add Vercel Blob to this project (BLOB_READ_WRITE_TOKEN).'
         : 'Upload failed: ' + e.message });
     }
