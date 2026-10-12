@@ -273,7 +273,13 @@ th,td{border:1px solid #000;padding:4px;text-align:left}
 .sec>h4{padding:5px 8px;border-bottom:1px solid #000;background:#eee;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .sec .in{padding:8px}
 small{font-size:10px}
+.tb{position:sticky;top:0;background:#fff8d6;border-bottom:1px solid #000;padding:8px;margin-bottom:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px}
+.tb button{padding:6px 14px;font-weight:700;cursor:pointer;border:1px solid #000;background:#fff;border-radius:6px}
+.edit{outline:1px dashed #999;outline-offset:2px;min-height:16px}
+.edit:focus{outline:2px solid #D8141C;background:#fffbe6}
+@media print{.tb{display:none}.edit{outline:none;background:none}}
 </style></head><body>
+<div class="tb"><button onclick="window.print()">🖨 Print</button><button onclick="saveRet()">💾 Save return address as default</button><span>Dotted box (return address) click pannina mela edit pannalaam</span></div>
 <div class="lbl">
  <div class="row b">
   <div class="r"><h4>Customer Address</h4><b>${esc(o.name)}</b><br>${esc(o.address).replace(/\n/g,'<br>')}<br>Ph: ${esc(o.phone)}</div>
@@ -284,9 +290,9 @@ small{font-size:10px}
    <div style="margin-top:8px">${barcode('KZ'+o.id)}<div class="center">KZ${esc(o.id)}</div></div></div>
   </div>
  </div>
- <div class="b" style="padding:8px"><h4>If undelivered, return to:</h4>${esc(SELLER.name)}<br>${esc(addr).replace(/\n/g,'<br>')}${SELLER.phone?'<br>Ph: '+esc(SELLER.phone):''}</div>
+ <div class="b" style="padding:8px"><h4>If undelivered, return to:</h4><div id="ret" class="edit" contenteditable="true">${esc(SELLER.name)}<br>${esc(addr).replace(/\n/g,'<br>')}${SELLER.phone?'<br>Ph: '+esc(SELLER.phone):''}</div></div>
  <div style="padding:8px"><h4>Product Details</h4>
-  <table><tr><th>Item</th><th>Qty</th></tr>${o.items.map(i=>`<tr><td>${esc(i.name)}</td><td>${i.qty}</td></tr>`).join('')}</table>
+  <table><tr><th>Item</th><th style="width:40px">Qty</th><th style="width:110px">Order No.</th><th style="width:80px">Date</th></tr>${o.items.map(i=>`<tr><td>${esc(i.name)}</td><td>${i.qty}</td><td><b>#${esc(o.id)}</b></td><td>${d}</td></tr>`).join('')}</table>
  </div>
 </div>
 <div class="sec"><h4>TAX INVOICE / ORDER SUMMARY</h4><div class="in">
@@ -299,7 +305,17 @@ small{font-size:10px}
   <tr><td colspan="3"><b>Total</b></td><td><b>${inr(o.total)}</b></td></tr></table>
  <small>Payment: ${paid?'Paid online':'Cash on delivery'}. This is a computer generated invoice and does not require signature.</small>
 </div></div>
-<script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script>
+<script>
+function saveRet(){
+  var L=document.getElementById('ret').innerText.split('\n').map(function(s){return s.trim()}).filter(Boolean);
+  var ph='',rest=[];
+  L.slice(1).forEach(function(s){if(/^ph:/i.test(s))ph=s.replace(/^ph:\s*/i,'');else rest.push(s)});
+  var s={};try{s=JSON.parse(localStorage.getItem('kz_seller')||'{}')}catch(e){}
+  s.name=L[0]||s.name||'';s.addr=rest.join('\n');s.phone=ph;
+  localStorage.setItem('kz_seller',JSON.stringify(s));
+  alert('Return address saved. Next labels-la idhe varum.');
+}
+<\/script>
 </body></html>`;
   const w=window.open('','_blank');
   if(!w){toast('Allow pop-ups to print');return}
