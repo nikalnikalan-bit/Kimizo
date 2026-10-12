@@ -21,6 +21,9 @@
     const flag = F[String(p.o).toLowerCase()] || '🌏';
     const desc = p.desc || `${p.n} from ${p.o}, part of our ${p.sub || p.c} range. Carefully selected for quality and value, and delivered across India.`;
     const free = st.freeAbove > 0 ? ` (free above ${inr(st.freeAbove)})` : '';
+    const shipTxt = (p.ship !== undefined && p.ship !== null && p.ship !== '')
+      ? (Number(p.ship) > 0 ? inr(p.ship) + ' per item' : 'free')
+      : (st.shippingFee ? inr(st.shippingFee) + free : 'free');
     crumbs.innerHTML = `<a href="/">Home</a><span>›</span><span>${esc(p.c)}</span>${p.sub ? `<span>›</span><span>${esc(p.sub)}</span>` : ''}<span>›</span><span>${esc(p.n)}</span>`;
     box.innerHTML = `
     <div class="pd" style="--c:${COLORS[p.id % 5]}">
@@ -46,7 +49,7 @@
           <button type="button" class="add buy" id="pdbuy">Buy now</button>
         </div>
         <div class="pd-note">
-          <span>🚚 Shipping ${st.shippingFee ? inr(st.shippingFee) : 'free'}${st.shippingFee ? free : ''}</span>
+          <span>🚚 Shipping ${shipTxt}</span>
           <span>🛡️ Quality checked before dispatch</span>
           <span>🌐 Authentic products from Japan, Korea and China</span>
         </div>

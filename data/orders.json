@@ -263,5 +263,39 @@
       "rzpOrderId": "order_TmsM9gCdAj6jfC"
     },
     "history": []
+  },
+  {
+    "id": 1011,
+    "userId": 3,
+    "name": "Bala Nikalan K",
+    "phone": "9344138115",
+    "address": "3/69-2 sivan south street,puthur, nagapattinam - 611001",
+    "items": [
+      {
+        "id": 2,
+        "name": "Mini Instant Camera",
+        "price": 1,
+        "qty": 2
+      }
+    ],
+    "subtotal": 2,
+    "shipping": 0,
+    "total": 2,
+    "status": "placed",
+    "createdAt": "2026-10-12T06:24:01.898Z",
+    "payment": {
+      "method": "razorpay",
+      "status": "paid",
+      "rzpOrderId": "order_TmtekKovs3ILGz",
+      "rzpPaymentId": "pay_TmtgBqCdNv3pEK",
+      "paidAt": "2026-10-12T06:25:41.253Z"
+    },
+    "history": [
+      {
+        "status": "placed",
+        "at": "2026-10-12T06:25:41.254Z",
+        "note": "Payment received online (pay_TmtgBqCdNv3pEK)"
+      }
+    ]
   }
 ]

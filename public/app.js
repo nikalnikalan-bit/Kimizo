@@ -1,4 +1,7 @@
 let P=[],S={shippingFee:0,freeAbove:0};
+// shipping: products with their own charge (p.ship) pay that x qty, others use the store default
+function shipCalc(lines){let sub=0,manual=0,hasDef=false;lines.forEach(([p,q])=>{sub+=p.p*q;if(p.ship!=null&&p.ship!=="")manual+=Number(p.ship)*q;else hasDef=true});
+  const def=hasDef&&sub>0&&!(S.freeAbove>0&&sub>=S.freeAbove)?S.shippingFee:0;return{amt:manual+def,hasDef,sub}}
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const pic=p=>p.img?`<img src="${esc(p.img)}" alt="${esc(p.n)}">`:p.e;
 const G=id=>P.find(p=>p.id==id);
@@ -46,7 +49,7 @@ function drawCart(){
   localStorage.setItem("kz_cart",JSON.stringify(cart));
   const ids=Object.keys(cart);let t=0,n=0;
   $("items").innerHTML=ids.length?ids.map(id=>{const p=G(id),q=cart[id];t+=p.p*q;n+=q;return `<div class="row"><div class="e">${pic(p)}</div><div><b>${p.n}</b><div>${inr(p.p)}</div><div class="qty"><button data-d="-1" data-i="${id}" aria-label="Decrease">−</button>${q}<button data-d="1" data-i="${id}" aria-label="Increase">+</button></div></div></div>`}).join(""):`<div class="empty">Your cart is empty. Add something you like.</div>`;
-  const ship=t&&!(S.freeAbove>0&&t>=S.freeAbove)?S.shippingFee:0;$("ship").textContent=t?(ship?"Shipping "+inr(ship)+(S.freeAbove?" (free above "+inr(S.freeAbove)+")":""):"Free shipping"):"";$("tot").textContent=inr(t+ship);$("cc").textContent=n;
+  const sc=shipCalc(ids.map(id=>[G(id),cart[id]])),ship=t?sc.amt:0;$("ship").textContent=t?(ship?"Shipping "+inr(ship)+(S.freeAbove&&sc.hasDef?" (free above "+inr(S.freeAbove)+")":""):"Free shipping"):"";$("tot").textContent=inr(t+ship);$("cc").textContent=n;
 }
 function toast(m){const t=$("toast");t.textContent=m;t.classList.add("show");clearTimeout(toast.x);toast.x=setTimeout(()=>t.classList.remove("show"),1600)}
 function open(v){$("dr").classList.toggle("open",v);$("veil").classList.toggle("open",v)}

@@ -17,11 +17,12 @@
     "e": "📷",
     "c": "Electronics",
     "o": "Japan",
-    "p": 1,
+    "p": 2999,
     "m": 4499,
     "sub": "Cameras",
-    "img": "",
-    "desc": ""
+    "img": "/uploads/1791786603663-2e790fd7.webp",
+    "desc": "",
+    "ship": 40
   },
   {
     "id": 3,
@@ -31,7 +32,10 @@
     "o": "China",
     "p": 1199,
     "m": 1999,
-    "sub": "Wearables"
+    "sub": "Wearables",
+    "img": "/uploads/1791786673360-3cb73d4e.webp",
+    "ship": null,
+    "desc": ""
   },
   {
     "id": 4,

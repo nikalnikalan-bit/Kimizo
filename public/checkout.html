@@ -195,7 +195,9 @@ let P=[],S={shippingFee:0,freeAbove:0},cart=JSON.parse(localStorage.getItem('kz_
 const G=id=>P.find(p=>p.id==id);
 const pic=p=>p.img?`<img src="${esc(p.img)}" alt="">`:esc(p.e);
 const save=()=>localStorage.setItem('kz_cart',JSON.stringify(cart));
-const shipFor=sub=>sub>0&&!(S.freeAbove>0&&sub>=S.freeAbove)?S.shippingFee:0;
+// products with their own shipping charge pay that x qty; others use the store default (free above the limit)
+const shipCalc=()=>{let sub=0,manual=0,hasDef=false;Object.keys(cart).forEach(id=>{const p=G(id),q=cart[id];if(!p)return;sub+=p.p*q;if(p.ship!=null&&p.ship!=='')manual+=Number(p.ship)*q;else hasDef=true});
+  const def=hasDef&&sub>0&&!(S.freeAbove>0&&sub>=S.freeAbove)?S.shippingFee:0;return{sub,hasDef,amt:manual+def}};
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 function chime(){try{const c=new(window.AudioContext||window.webkitAudioContext)();[[880,0],[1318,.12],[1760,.24]].forEach(([f,t])=>{const o=c.createOscillator(),g=c.createGain(),s=c.currentTime+t;o.type='sine';o.frequency.value=f;g.gain.setValueAtTime(.0001,s);g.gain.exponentialRampToValueAtTime(.25,s+.02);g.gain.exponentialRampToValueAtTime(.0001,s+.35);o.connect(g);g.connect(c.destination);o.start(s);o.stop(s+.4)})}catch(e){}}
 function petals(){const box=$('petals'),cols=['#FFB7C5','#FF7AA8','#FFD23F','#6EC1F2','#4FD1BE','#E4231F'];box.innerHTML='';
@@ -242,10 +244,10 @@ function draw(){
     return `<div class="ln"><div class="e">${pic(p)}</div><div class="m"><b>${esc(p.n)}</b><small>${esc(p.c)} · ${esc(p.o)}</small><div>${inr(p.p)}</div>
     <div class="qty"><button data-d="-1" data-i="${id}" aria-label="Decrease">−</button><span>${q}</span><button data-d="1" data-i="${id}" aria-label="Increase">+</button><button class="rm" data-rm="${id}">Remove</button></div></div>
     <div class="t">${inr(p.p*q)}</div></div>`}).join('');
-  const ship=shipFor(sub);
+  const sc=shipCalc(),ship=sc.amt;
   $('cnt').textContent=n;$('sub').textContent=inr(sub);
   $('shp').textContent=ship?inr(ship):'FREE';
-  $('hint').textContent=S.freeAbove>0&&sub<S.freeAbove?'Add '+inr(S.freeAbove-sub)+' more for free shipping':'';
+  $('hint').textContent=sc.hasDef&&S.freeAbove>0&&sub<S.freeAbove?'Add '+inr(S.freeAbove-sub)+' more for free shipping':'';
   $('tot').textContent=inr(sub+ship);
 }
 $('lines').onclick=e=>{

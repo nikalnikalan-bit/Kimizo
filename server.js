@@ -231,6 +231,8 @@ const clean = b => ({
   o: String(b.o || '').trim(), p: Number(b.p), m: Number(b.m || b.p),
   img: String(b.img || '').trim(),
   sub: String(b.sub || '').trim(),
+  // manual shipping charge per item (₹). null = use the store default from Settings
+  ship: (b.ship === undefined || b.ship === null || b.ship === '') ? null : Math.max(0, Math.round((Number(b.ship) || 0) * 100) / 100),
   desc: String(b.desc || '').trim().slice(0, 2000)
 });
 const valid = p => p.n && p.c && p.o && p.p > 0;
@@ -299,16 +301,19 @@ app.post('/api/orders', authed, async (req, res) => {
   const online = (req.body || {}).paymentMethod === 'online';
   if (online && !rzpOn) return res.status(400).json({ error: 'Online payment is not available right now' });
   const products = read('products');
-  let total = 0;
+  let total = 0, manualShip = 0, hasDefault = false;
   const lines = [];
   for (const it of items) {
     const p = products.find(x => x.id == it.id), qty = Math.floor(Number(it.qty));
     if (!p || !(qty > 0)) return res.status(400).json({ error: 'Invalid item in cart' });
     total += p.p * qty;
+    if (p.ship !== undefined && p.ship !== null && p.ship !== '') manualShip += Number(p.ship) * qty; else hasDefault = true;
     lines.push({ id: p.id, name: p.n, price: p.p, qty });
   }
   const st = getSettings();
-  const shipping = st.freeAbove > 0 && total >= st.freeAbove ? 0 : st.shippingFee;
+  // products with their own shipping charge: that amount x qty. Others: store default (per order, free above the limit)
+  const defShip = hasDefault && !(st.freeAbove > 0 && total >= st.freeAbove) ? st.shippingFee : 0;
+  const shipping = Math.round((manualShip + defShip) * 100) / 100;
   const orders = read('orders');
   const order = {
     id: orders.reduce((m, x) => Math.max(m, x.id), 1000) + 1,
