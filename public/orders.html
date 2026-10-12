@@ -102,7 +102,7 @@ function card(o){
     <div><h3>Order details</h3>
       ${o.items.map(i=>`<div class="sr"><span>${esc(i.name)} × ${i.qty}</span><span>${inr(i.price*i.qty)}</span></div>`).join('')}
       <div class="sr"><span>Shipping</span><span>${o.shipping?inr(o.shipping):'FREE'}</span></div>
-      <div class="sr t"><span>Total (pay on delivery)</span><span>${inr(o.total)}</span></div>
+      <div class="sr t"><span>${o.payment&&o.payment.status==='paid'?'Total (paid online)':'Total (pay on delivery)'}</span><span>${inr(o.total)}</span></div>
       <p style="font-size:14px;margin:12px 0 0"><b>Delivering to</b><br>${esc(o.name)} · ${esc(o.phone)}<br>${esc(o.address)}</p>
     </div></div>`:'';
   return `<article class="oc"><div class="oh"><div><span class="id">Order #${o.id}</span><small>${fmt(o.createdAt)} · ${qty} item${qty>1?'s':''}</small></div>

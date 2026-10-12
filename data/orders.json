@@ -210,5 +210,58 @@
         "note": "Order received"
       }
     ]
+  },
+  {
+    "id": 1009,
+    "userId": 9,
+    "name": "jasimali",
+    "phone": "7904025971",
+    "address": "Noore Muhamadhiya street , Adiyakkamangalam, Thiruvarur - 611101",
+    "items": [
+      {
+        "id": 24,
+        "name": "Wireless Earbuds",
+        "price": 1299,
+        "qty": 1
+      }
+    ],
+    "subtotal": 1299,
+    "shipping": 0,
+    "total": 1299,
+    "status": "placed",
+    "createdAt": "2026-10-10T11:32:34.030Z",
+    "history": [
+      {
+        "status": "placed",
+        "at": "2026-10-10T11:32:34.030Z",
+        "note": "Order received"
+      }
+    ]
+  },
+  {
+    "id": 1010,
+    "userId": 3,
+    "name": "Bala Nikalan K",
+    "phone": "7806880384",
+    "address": "10 VASANTH nager tvr, tiruvarar - 610001",
+    "items": [
+      {
+        "id": 2,
+        "name": "Mini Instant Camera",
+        "price": 3299,
+        "qty": 1
+      }
+    ],
+    "subtotal": 3299,
+    "shipping": 0,
+    "total": 3299,
+    "status": "payment_pending",
+    "createdAt": "2026-10-12T05:07:44.864Z",
+    "payment": {
+      "method": "razorpay",
+      "status": "pending",
+      "rzpOrderId": "order_TmsM9gCdAj6jfC"
+    },
+    "history": []
   }
 ]

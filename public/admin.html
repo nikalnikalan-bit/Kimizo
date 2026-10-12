@@ -66,7 +66,7 @@ th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);vertical-a
     <div class="g2">
       <div><label>Emoji (used if no image)</label><input id="pe" placeholder="🎧"></div>
       <div><label>Product image (optional)</label>
-        <input id="pf" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
+        <input id="pf" type="file" accept="image/*">
         <input type="hidden" id="pi">
         <div id="prev" style="margin-top:8px;display:flex;align-items:center;gap:10px" hidden>
           <div class="th" style="width:60px;height:60px"><img id="pimg" alt="Preview"></div>
@@ -134,13 +134,28 @@ $('tabs').onclick=e=>{
 /* Image upload */
 function showPrev(u){$('pi').value=u||'';$('prev').hidden=!u;if(u)$('pimg').src=u;$('pf').value=''}
 $('prm').onclick=()=>showPrev('');
+/* Convert any browser-readable image to a small WEBP/JPEG (max 1200px) before upload */
+async function prepImage(f){
+  if(f.type==='image/gif'&&f.size<=4*1024*1024)return f; // keep animated GIFs as they are
+  const img=await new Promise((ok,no)=>{const i=new Image();const u=URL.createObjectURL(f);i.onload=()=>{URL.revokeObjectURL(u);ok(i)};i.onerror=()=>{URL.revokeObjectURL(u);no(new Error("This image format can't be read by your browser. Please use JPG, PNG, WEBP, AVIF or GIF."))};i.src=u});
+  const w0=img.naturalWidth||800,h0=img.naturalHeight||800,k=Math.min(1,1200/Math.max(w0,h0));
+  const c=document.createElement('canvas');c.width=Math.max(1,Math.round(w0*k));c.height=Math.max(1,Math.round(h0*k));
+  const x=c.getContext('2d');x.drawImage(img,0,0,c.width,c.height);
+  const to=(t,q)=>new Promise(r=>c.toBlob(r,t,q));
+  let blob=await to('image/webp',.85);
+  if(!blob||blob.type!=='image/webp'){x.globalCompositeOperation='destination-over';x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);blob=await to('image/jpeg',.88)}
+  if(!blob)throw new Error('Could not process this image');
+  return blob;
+}
 $('pf').onchange=async()=>{
   const f=$('pf').files[0];if(!f)return;
-  if(f.size>5*1024*1024){toast('Image must be under 5 MB');$('pf').value='';return}
+  if(f.size>25*1024*1024){toast('Image must be under 25 MB');$('pf').value='';return}
   toast('Uploading...');
   try{
-    const r=await fetch('/api/upload',{method:'POST',headers:{'Content-Type':f.type,Authorization:'Bearer '+TOKEN},body:f});
-    const d=await r.json();if(!r.ok)throw new Error(d.error||'Upload failed');
+    const blob=await prepImage(f);
+    if(blob.size>4*1024*1024)throw new Error('Image is too large even after compression');
+    const r=await fetch('/api/upload',{method:'POST',headers:{'Content-Type':blob.type,Authorization:'Bearer '+TOKEN},body:blob});
+    const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'Upload failed');
     showPrev(d.url);toast('Image uploaded');
   }catch(e){toast(e.message);$('pf').value=''}
 };
@@ -169,7 +184,7 @@ $('plist').onclick=async e=>{
 /* Orders */
 async function loadOrders(){
   const O=await api('/api/orders');
-  $('olist').innerHTML=O.map(o=>{const last=(o.history||[]).slice(-1)[0];return `<div class="ord"><div><b>#${o.id}</b> · ${esc(o.name)} · ${esc(o.phone)}<br><small>${esc(o.address)}</small><br><small>${o.items.map(i=>esc(i.name)+' × '+i.qty).join(', ')}</small><br><small>${new Date(o.createdAt).toLocaleString('en-IN')}</small><br><small>Last update: ${last?esc(last.note||last.status)+' · '+new Date(last.at).toLocaleString('en-IN'):'-'}</small></div><div style="text-align:right;min-width:240px"><b>${inr(o.total)}</b> <small>(shipping ${inr(o.shipping||0)})</small><select data-oid="${o.id}" style="margin-top:6px">${['placed','packed','shipped','delivered','cancelled'].map(s=>`<option${s===o.status?' selected':''}>${s}</option>`).join('')}</select><input data-note="${o.id}" maxlength="140" placeholder="Tracking note, e.g. Reached Chennai hub" style="margin-top:6px"><button class="btn s" data-upd="${o.id}" style="margin-top:6px">Update tracking</button></div></div>`}).join('')||'<p>No orders yet.</p>';
+  $('olist').innerHTML=O.map(o=>{const last=(o.history||[]).slice(-1)[0];return `<div class="ord"><div><b>#${o.id}</b> · ${esc(o.name)} · ${esc(o.phone)}<br><small>${esc(o.address)}</small><br><small>${o.items.map(i=>esc(i.name)+' × '+i.qty).join(', ')}</small><br><small>${new Date(o.createdAt).toLocaleString('en-IN')}</small><br><small>Last update: ${last?esc(last.note||last.status)+' · '+new Date(last.at).toLocaleString('en-IN'):'-'}</small></div><div style="text-align:right;min-width:240px"><b>${inr(o.total)}</b> <small>(shipping ${inr(o.shipping||0)})</small><br><small style="color:${o.payment&&o.payment.status==='paid'?'#2FBF71':'var(--mute)'}">${o.payment&&o.payment.status==='paid'?'✓ Paid online · '+esc(o.payment.rzpPaymentId||''):'Cash on delivery'}</small><select data-oid="${o.id}" style="margin-top:6px">${['placed','packed','shipped','delivered','cancelled'].map(s=>`<option${s===o.status?' selected':''}>${s}</option>`).join('')}</select><input data-note="${o.id}" maxlength="140" placeholder="Tracking note, e.g. Reached Chennai hub" style="margin-top:6px"><button class="btn s" data-upd="${o.id}" style="margin-top:6px">Update tracking</button></div></div>`}).join('')||'<p>No orders yet.</p>';
 }
 $('olist').onclick=async e=>{
   const id=e.target.dataset.upd;if(!id)return;

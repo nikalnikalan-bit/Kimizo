@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Review your order – Kimizo</title>
 <link rel="stylesheet" href="style.css">
+<script src="https://checkout.razorpay.com/v1/checkout.js" defer></script>
 <style>
 [hidden]{display:none!important}
 .steps{display:flex;gap:8px;margin-left:auto;font-size:13px;font-weight:700;flex-wrap:wrap}
@@ -115,8 +116,8 @@ input,textarea{width:100%;padding:10px 12px;border:3px solid var(--ink);border-r
         </div>
         <div class="box">
           <h2>Payment</h2>
-          <label class="pay"><input type="radio" name="pm" checked> Cash on delivery</label>
-          <label class="pay off"><input type="radio" name="pm" disabled> Online payment (coming soon)</label>
+          <label class="pay"><input type="radio" name="pm" value="cod" checked> Cash on delivery</label>
+          <label class="pay off" id="onl"><input type="radio" name="pm" value="online" disabled> Pay online – UPI, Cards, Netbanking, Wallets <span id="onlnote">(coming soon)</span></label>
         </div>
       </div>
 
@@ -146,7 +147,7 @@ input,textarea{width:100%;padding:10px 12px;border:3px solid var(--ink);border-r
     <p>Thank you, <b id="oname"></b>. Your order number is <b id="oid"></b>.</p>
     <div class="box" style="text-align:left;margin-top:18px">
       <div id="olines"></div>
-      <div class="sr tot"><span>Total (pay on delivery)</span><span id="ototal"></span></div>
+      <div class="sr tot"><span id="otl">Total (pay on delivery)</span><span id="ototal"></span></div>
       <p style="margin:12px 0 0;font-size:14px"><b>Delivering to:</b> <span id="oaddr"></span></p>
     </div>
     <a class="cta" href="/">Continue shopping</a>
@@ -164,7 +165,7 @@ input,textarea{width:100%;padding:10px 12px;border:3px solid var(--ink);border-r
       </div>
       <h2>Order placed!</h2>
       <div class="amt" id="fxamt"></div>
-      <p style="margin:0">Order <b id="fxid"></b> · Pay on delivery</p>
+      <p style="margin:0">Order <b id="fxid"></b> · <span id="fxpm">Pay on delivery</span></p>
       <div class="mascot-row">
         <svg class="mochi" viewBox="0 0 120 110" aria-hidden="true">
           <ellipse cx="60" cy="102" rx="34" ry="5" fill="#111" opacity=".2"/>
@@ -206,6 +207,31 @@ function showFx(mode,d){
 }
 $('fxview').onclick=()=>showFx(null);
 
+let RZ_KEY=null;
+const method=()=>(document.querySelector('input[name=pm]:checked')||{}).value||'cod';
+const btnLabel=()=>method()==='online'?'Pay now & place order':'Place order';
+function payOnline(d,name,phone){
+  return new Promise((resolve,reject)=>{
+    if(typeof Razorpay==='undefined'){reject(new Error('Could not load the payment window. Check your internet and try again.'));return}
+    let started=false;
+    const rz=new Razorpay({
+      key:d.razorpay.key,amount:d.razorpay.amount,currency:'INR',name:'Kimizo',description:'Order #'+d.id,order_id:d.razorpay.orderId,
+      prefill:{name,contact:phone,email:(U&&U.email)||''},theme:{color:'#E4231F'},
+      handler:async resp=>{
+        started=true;showFx('wait');
+        try{
+          const r=await fetch('/api/payment/verify',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+tok},
+            body:JSON.stringify({orderId:d.id,razorpay_order_id:resp.razorpay_order_id,razorpay_payment_id:resp.razorpay_payment_id,razorpay_signature:resp.razorpay_signature})});
+          const v=await r.json();
+          if(!r.ok)throw new Error(v.error||'Payment verification failed');
+          resolve(v);
+        }catch(e){reject(new Error(e.message+'. If money was deducted, your order will be confirmed shortly - check My Orders.'))}
+      },
+      modal:{confirm_close:true,ondismiss:()=>{if(!started)reject(new Error('Payment cancelled. You can try again.'))}}
+    });
+    rz.open();
+  });
+}
 function draw(){
   Object.keys(cart).forEach(id=>{if(!G(id))delete cart[id]});save();
   const ids=Object.keys(cart);
@@ -235,24 +261,35 @@ $('place').onclick=async()=>{
   const bad=!name?'Please enter your name':!/^\d{10}$/.test(phone)?'Please enter a valid 10-digit phone number':
     addr.length<8?'Please enter your full address':!city?'Please enter your city':!/^\d{6}$/.test(pin)?'Please enter a 6-digit pincode':'';
   if(bad){$('err').textContent=bad;return}
-  $('err').textContent='';$('place').disabled=true;$('place').textContent='Placing order...';showFx('wait');
+  const online=method()==='online';
+  $('err').textContent='';$('place').disabled=true;$('place').textContent=online?'Opening payment...':'Placing order...';
+  if(!online)showFx('wait');
   const address=`${addr}, ${city} - ${pin}`;
   try{
     const [r]=await Promise.all([fetch('/api/orders',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+tok},
-      body:JSON.stringify({name,phone,address,items:Object.entries(cart).map(([id,qty])=>({id:+id,qty}))})}),sleep(1400)]);
-    const d=await r.json();
+      body:JSON.stringify({name,phone,address,paymentMethod:online?'online':'cod',items:Object.entries(cart).map(([id,qty])=>({id:+id,qty}))})}),online?null:sleep(1400)]);
+    let d=await r.json();
     if(r.status===401){localStorage.removeItem('kz_token');localStorage.removeItem('kz_user');location.href='/login.html?next=/checkout.html';return}
     if(!r.ok)throw new Error(d.error||'Order failed');
+    if(online&&d.razorpay)d=await payOnline(d,name,phone);
+    const paid=d.payment&&d.payment.status==='paid';
     cart={};save();
     $('review').hidden=true;$('ok').hidden=false;showFx('ok',d);
+    $('fxpm').textContent=paid?'Paid online ✓':'Pay on delivery';
+    $('otl').textContent=paid?'Total paid online':'Total (pay on delivery)';
     $('s2').classList.remove('on');$('s3').classList.add('on');
     $('oname').textContent=name;$('oid').textContent='#'+d.id;
     $('olines').innerHTML=d.items.map(i=>`<div class="sr"><span>${esc(i.name)} × ${i.qty}</span><span>${inr(i.price*i.qty)}</span></div>`).join('')+
       `<div class="sr"><span>Shipping</span><span>${d.shipping?inr(d.shipping):'FREE'}</span></div>`;
     $('ototal').textContent=inr(d.total);$('oaddr').textContent=address;
     scrollTo({top:0,behavior:'smooth'});
-  }catch(e){showFx(null);$('err').textContent=e.message;$('place').disabled=false;$('place').textContent='Place order'}
+  }catch(e){showFx(null);$('err').textContent=e.message;$('place').disabled=false;$('place').textContent=btnLabel()}
 };
+document.querySelectorAll('input[name=pm]').forEach(i=>i.onchange=()=>{$('place').textContent=btnLabel()});
+fetch('/api/payment/config').then(r=>r.json()).then(c=>{
+  RZ_KEY=c.razorpayKey;
+  if(RZ_KEY){const o=document.querySelector('input[value=online]');o.disabled=false;$('onl').classList.remove('off');$('onlnote').remove()}
+}).catch(()=>{});
 
 if(tok){
   if(U){$('fn').value=U.name||'';$('fp').value=U.phone||''}

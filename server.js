@@ -35,7 +35,7 @@ const write = (n, d) => {
   return writeToDrive(n, d).catch(err => console.error(`Failed to sync ${n} to Drive:`, err.message));
 };
 
-app.use(express.json());
+app.use(express.json({ verify: (req, res, buf) => { req.rawBody = buf; } })); // rawBody is needed for the Razorpay webhook signature
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Serverless / Vercel middleware: Request varumbo cache empty-aa irundha Google Drive-la irundhu load pannum
@@ -157,16 +157,35 @@ const sniff = b => {
   if (b.slice(0, 4).toString() === 'RIFF' && b.slice(8, 12).toString() === 'WEBP') return 'webp';
   return null;
 };
-const dropFile = u => { if (typeof u === 'string' && u.startsWith('/uploads/')) fs.unlink(path.join(UP, path.basename(u)), () => {}); };
+const dropFile = u => {
+  if (typeof u !== 'string') return;
+  if (u.startsWith('/uploads/')) { fs.unlink(path.join(UP, path.basename(u)), () => {}); return; }
+  if (u.includes('.blob.vercel-storage.com/')) { try { require('@vercel/blob').del(u).catch(() => {}); } catch (_) {} }
+};
 
 app.post('/api/upload', admin,
-  express.raw({ type: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'], limit: '5mb' }),
-  (req, res) => {
+  express.raw({ type: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'], limit: '4mb' }),
+  async (req, res) => {
     const ext = Buffer.isBuffer(req.body) && sniff(req.body);
-    if (!ext) return res.status(400).json({ error: 'Please upload a JPG, PNG, WEBP or GIF image' });
+    if (!ext) return res.status(400).json({ error: 'Invalid image. Please try another file.' });
     const name = Date.now() + '-' + require('crypto').randomBytes(4).toString('hex') + '.' + ext;
-    fs.writeFileSync(path.join(UP, name), req.body);
-    res.status(201).json({ url: '/uploads/' + name });
+    const mime = { jpg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp' }[ext];
+    try {
+      // Vercel (and any host with a read-only disk): store in Vercel Blob
+      if (process.env.BLOB_READ_WRITE_TOKEN) {
+        const { put } = require('@vercel/blob');
+        const blob = await put('products/' + name, req.body, { access: 'public', contentType: mime, addRandomSuffix: false });
+        return res.status(201).json({ url: blob.url });
+      }
+      // Local development: save to public/uploads
+      fs.writeFileSync(path.join(UP, name), req.body);
+      res.status(201).json({ url: '/uploads/' + name });
+    } catch (e) {
+      console.error('Upload failed:', e.message);
+      res.status(500).json({ error: process.env.VERCEL
+        ? 'Image storage not set up. Add Vercel Blob to this project (BLOB_READ_WRITE_TOKEN).'
+        : 'Upload failed: ' + e.message });
+    }
   });
 
 // ---------- Settings ----------
@@ -244,11 +263,41 @@ app.delete('/api/products/:id', admin, async (req, res) => {
   res.json({ ok: true });
 });
 
+// ---------- Razorpay ----------
+const crypto = require('crypto');
+const RZP_KEY = process.env.RAZORPAY_KEY_ID, RZP_SECRET = process.env.RAZORPAY_KEY_SECRET;
+const rzpOn = !!(RZP_KEY && RZP_SECRET);
+console.log('Razorpay:', rzpOn ? 'ON (' + (RZP_KEY.startsWith('rzp_live') ? 'LIVE' : 'TEST') + ' mode)' : 'OFF (keys not found in .env)');
+
+const rzpCreateOrder = async (amountPaise, receipt, notes) => {
+  const r = await fetch('https://api.razorpay.com/v1/orders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Basic ' + Buffer.from(RZP_KEY + ':' + RZP_SECRET).toString('base64') },
+    body: JSON.stringify({ amount: amountPaise, currency: 'INR', receipt: String(receipt), notes })
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error((d.error && d.error.description) || 'Razorpay order creation failed');
+  return d;
+};
+const safeEq = (a, b) => { a = Buffer.from(String(a)); b = Buffer.from(String(b)); return a.length === b.length && crypto.timingSafeEqual(a, b); };
+const markPaid = (o, paymentId) => {
+  if (o.payment && o.payment.status === 'paid') return false;
+  o.payment = { ...(o.payment || {}), method: 'razorpay', status: 'paid', rzpPaymentId: paymentId, paidAt: new Date().toISOString() };
+  o.status = 'placed';
+  o.history = [...(o.history || []), { status: 'placed', at: new Date().toISOString(), note: 'Payment received online (' + paymentId + ')' }];
+  return true;
+};
+
+// public key id (safe to expose) so the checkout page knows if online payment is available
+app.get('/api/payment/config', (req, res) => res.json({ razorpayKey: rzpOn ? RZP_KEY : null }));
+
 // ---------- Orders ----------
 app.post('/api/orders', authed, async (req, res) => {
   const { name, phone, address, items } = req.body || {};
   if (!name || !phone || !address || !Array.isArray(items) || !items.length)
     return res.status(400).json({ error: 'name, phone, address and items are required' });
+  const online = (req.body || {}).paymentMethod === 'online';
+  if (online && !rzpOn) return res.status(400).json({ error: 'Online payment is not available right now' });
   const products = read('products');
   let total = 0;
   const lines = [];
@@ -263,16 +312,62 @@ app.post('/api/orders', authed, async (req, res) => {
   const orders = read('orders');
   const order = {
     id: orders.reduce((m, x) => Math.max(m, x.id), 1000) + 1,
-    userId: req.user.id, name, phone, address, items: lines, subtotal: total, shipping, total: total + shipping, status: 'placed', createdAt: new Date().toISOString(),
-    history: [{ status: 'placed', at: new Date().toISOString(), note: 'Order received' }]
+    userId: req.user.id, name, phone, address, items: lines, subtotal: total, shipping, total: total + shipping,
+    status: online ? 'payment_pending' : 'placed', createdAt: new Date().toISOString(),
+    payment: { method: online ? 'razorpay' : 'cod', status: 'pending' },
+    history: online ? [] : [{ status: 'placed', at: new Date().toISOString(), note: 'Order received' }]
   };
   orders.push(order);
-  await write('orders', orders);
-  res.status(201).json(order);
+  if (!online) {
+    await write('orders', orders);
+    return res.status(201).json(order);
+  }
+  try {
+    // amount is calculated on the server from product prices; the browser can't change it
+    const rz = await rzpCreateOrder(Math.round(order.total * 100), order.id, { orderId: String(order.id), userId: String(req.user.id) });
+    order.payment.rzpOrderId = rz.id;
+    await write('orders', orders);
+    res.status(201).json({ ...order, razorpay: { key: RZP_KEY, orderId: rz.id, amount: rz.amount } });
+  } catch (e) {
+    orders.splice(orders.indexOf(order), 1);
+    console.error('Razorpay order failed:', e.message);
+    res.status(502).json({ error: 'Could not start online payment. Please try again or choose Cash on delivery.' });
+  }
 });
 
-app.get('/api/my-orders', authed, (req, res) => res.json(read('orders').filter(o => o.userId === req.user.id).reverse()));
-app.get('/api/orders', admin, (req, res) => res.json(read('orders').reverse()));
+// Called by the browser after Razorpay checkout succeeds: verifies the signature
+app.post('/api/payment/verify', authed, async (req, res) => {
+  if (!rzpOn) return res.status(400).json({ error: 'Online payment is not available' });
+  const { orderId, razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body || {};
+  const orders = read('orders'), o = orders.find(x => x.id == orderId && x.userId === req.user.id);
+  if (!o || !o.payment || !razorpay_order_id || o.payment.rzpOrderId !== razorpay_order_id)
+    return res.status(400).json({ error: 'Order not found' });
+  const expected = crypto.createHmac('sha256', RZP_SECRET).update(razorpay_order_id + '|' + razorpay_payment_id).digest('hex');
+  if (!razorpay_payment_id || !razorpay_signature || !safeEq(expected, razorpay_signature))
+    return res.status(400).json({ error: 'Payment verification failed' });
+  if (markPaid(o, razorpay_payment_id)) await write('orders', orders);
+  res.json(o);
+});
+
+// Razorpay webhook (backup if the customer closes the page right after paying)
+// Dashboard → Settings → Webhooks → URL: https://YOUR-DOMAIN/api/payment/webhook, events: payment.captured, order.paid
+app.post('/api/payment/webhook', async (req, res) => {
+  const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+  const sig = req.get('x-razorpay-signature');
+  if (!secret || !sig || !req.rawBody) return res.status(400).end();
+  const expected = crypto.createHmac('sha256', secret).update(req.rawBody).digest('hex');
+  if (!safeEq(expected, sig)) return res.status(400).end();
+  const ev = req.body || {};
+  if (ev.event === 'payment.captured' || ev.event === 'order.paid') {
+    const pay = (ev.payload && ev.payload.payment && ev.payload.payment.entity) || {};
+    const orders = read('orders'), o = orders.find(x => x.payment && x.payment.rzpOrderId && x.payment.rzpOrderId === pay.order_id);
+    if (o && pay.amount === Math.round(o.total * 100) && markPaid(o, pay.id)) await write('orders', orders);
+  }
+  res.json({ ok: true });
+});
+
+app.get('/api/my-orders', authed, (req, res) => res.json(read('orders').filter(o => o.userId === req.user.id && o.status !== 'payment_pending').reverse()));
+app.get('/api/orders', admin, (req, res) => res.json(read('orders').filter(o => o.status !== 'payment_pending').reverse()));
 
 app.patch('/api/orders/:id', admin, async (req, res) => {
   const orders = read('orders'), o = orders.find(x => x.id == req.params.id);
@@ -287,7 +382,7 @@ app.patch('/api/orders/:id', admin, async (req, res) => {
 });
 
 app.use((err, req, res, next) =>
-  res.status(err.status || 500).json({ error: err.type === 'entity.too.large' ? 'Image is too large (max 5 MB)' : err.message || 'Server error' }));
+  res.status(err.status || 500).json({ error: err.type === 'entity.too.large' ? 'Image is too large (max 4 MB)' : err.message || 'Server error' }));
 
 // Initial data hydration from Google Drive and Server Launch
 (async () => {
