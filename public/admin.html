@@ -86,7 +86,8 @@ th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);vertical-a
 
 <section id="t-orders" hidden><div class="box"><h2>Orders</h2><div id="olist"></div></div></section>
 
-<section id="t-settings" hidden><div class="box">
+<section id="t-settings" hidden>
+<div class="box">
   <h2>Store settings</h2>
   <div class="g2">
     <div><label>Store name</label><input id="s_storeName"></div>
@@ -102,7 +103,20 @@ th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);vertical-a
     <div><label>Free shipping above ₹ (0 = never free)</label><input id="s_freeAbove" type="number" min="0"></div>
   </div>
   <p style="margin:14px 0 0"><button class="btn" id="ssave">Save settings</button></p>
-</div></section>
+</div>
+
+<div class="box">
+  <h2>Print label details</h2>
+  <small style="color:var(--mute)">Shipping label-la "If undelivered, return to" and "Sold by" idhula irundhu varum. Intha browser-la mattum save aagum.</small>
+  <div class="g2">
+    <div><label>Seller / shop name</label><input id="pl_name" placeholder="Kimizo"></div>
+    <div><label>Phone</label><input id="pl_phone" placeholder="98765 43210"></div>
+  </div>
+  <label>Return address</label><textarea id="pl_addr" rows="3" placeholder="Shop no, street, city, state, PIN"></textarea>
+  <label>GSTIN (optional)</label><input id="pl_gstin">
+  <p style="margin:14px 0 0"><button class="btn" id="plsave">Save label details</button></p>
+</div>
+</section>
 </main>
 </div>
 <div id="toast" hidden></div>
@@ -122,7 +136,7 @@ async function api(url,method='GET',body){
   return d;
 }
 function bye(){localStorage.removeItem('kz_token');localStorage.removeItem('kz_user');location.href='/login.html'}
-(async()=>{try{await api('/api/admin/check');$('app').hidden=false;loadProducts();loadSettings()}catch{bye()}})();
+(async()=>{try{await api('/api/admin/check');$('app').hidden=false;loadProducts();loadSettings();loadSeller()}catch{bye()}})();
 
 $('tabs').onclick=e=>{
   const t=e.target.dataset.t;if(!t)return;
@@ -195,9 +209,11 @@ const shipBox=o=>`<div style="margin-top:12px;padding-top:10px;border-top:1px da
   ${isPaid(o)?'<small style="width:100%">Locked – customer already paid online</small>':''}</div>`;
 async function loadOrders(){
   const O=await api('/api/orders');
-  $('olist').innerHTML=O.map(o=>{const last=(o.history||[]).slice(-1)[0];return `<div class="ord"><div><b>#${o.id}</b> · ${esc(o.name)} · ${esc(o.phone)}<br><small>${esc(o.address)}</small><br><small>${o.items.map(i=>esc(i.name)+' × '+i.qty).join(', ')}</small><br><small>${new Date(o.createdAt).toLocaleString('en-IN')}</small><br><small>Last update: ${last?esc(last.note||last.status)+' · '+new Date(last.at).toLocaleString('en-IN'):'-'}</small></div><div style="text-align:right;min-width:240px"><b>${inr(o.total)}</b> <small>(shipping ${inr(o.shipping||0)})</small><br><small style="color:${o.payment&&o.payment.status==='paid'?'#2FBF71':'var(--mute)'}">${o.payment&&o.payment.status==='paid'?'✓ Paid online · '+esc(o.payment.rzpPaymentId||''):'Cash on delivery'}</small><select data-oid="${o.id}" style="margin-top:6px">${['placed','packed','shipped','delivered','cancelled'].map(s=>`<option${s===o.status?' selected':''}>${s}</option>`).join('')}</select><input data-note="${o.id}" maxlength="140" placeholder="Tracking note, e.g. Reached Chennai hub" style="margin-top:6px"><button class="btn s" data-upd="${o.id}" style="margin-top:6px">Update tracking</button>${shipBox(o)}</div></div>`}).join('')||'<p>No orders yet.</p>';
+  window.OD=O;
+  $('olist').innerHTML=O.map(o=>{const last=(o.history||[]).slice(-1)[0];return `<div class="ord"><div><b>#${o.id}</b> · ${esc(o.name)} · ${esc(o.phone)}<br><small>${esc(o.address)}</small><br><small>${o.items.map(i=>esc(i.name)+' × '+i.qty).join(', ')}</small><br><small>${new Date(o.createdAt).toLocaleString('en-IN')}</small><br><small>Last update: ${last?esc(last.note||last.status)+' · '+new Date(last.at).toLocaleString('en-IN'):'-'}</small></div><div style="text-align:right;min-width:240px"><b>${inr(o.total)}</b> <small>(shipping ${inr(o.shipping||0)})</small><br><small style="color:${o.payment&&o.payment.status==='paid'?'#2FBF71':'var(--mute)'}">${o.payment&&o.payment.status==='paid'?'✓ Paid online · '+esc(o.payment.rzpPaymentId||''):'Cash on delivery'}</small><select data-oid="${o.id}" style="margin-top:6px">${['placed','packed','shipped','delivered','cancelled'].map(s=>`<option${s===o.status?' selected':''}>${s}</option>`).join('')}</select><input data-note="${o.id}" maxlength="140" placeholder="Tracking note, e.g. Reached Chennai hub" style="margin-top:6px"><button class="btn s" data-upd="${o.id}" style="margin-top:6px">Update tracking</button> <button class="btn o s" data-print="${o.id}" style="margin-top:6px">🖨 Print label</button>${shipBox(o)}</div></div>`}).join('')||'<p>No orders yet.</p>';
 }
 $('olist').onclick=async e=>{
+  const pid=e.target.dataset.print;if(pid){printLabel(pid);return}
   const sid=e.target.dataset.saveship;
   if(sid){
     const v=document.querySelector(`input[data-ship="${sid}"]`).value;
@@ -213,6 +229,82 @@ $('olist').onclick=async e=>{
 /* Settings */
 async function loadSettings(){const s=await fetch('/api/settings').then(r=>r.json());SK.forEach(k=>$('s_'+k).value=s[k])}
 $('ssave').onclick=async()=>{const b={};SK.forEach(k=>b[k]=$('s_'+k).value);try{await api('/api/settings','PUT',b);toast('Settings saved')}catch(e){toast(e.message)}};
+
+/* Label seller details (saved in this browser) */
+const SELLER_DEF={name:'Kimizo',addr:'',phone:'',gstin:''};
+function getSeller(){try{return Object.assign({},SELLER_DEF,JSON.parse(localStorage.getItem('kz_seller')||'{}'))}catch{return{...SELLER_DEF}}}
+function loadSeller(){const s=getSeller();$('pl_name').value=s.name;$('pl_phone').value=s.phone;$('pl_addr').value=s.addr;$('pl_gstin').value=s.gstin}
+$('plsave').onclick=()=>{
+  try{localStorage.setItem('kz_seller',JSON.stringify({name:$('pl_name').value.trim(),phone:$('pl_phone').value.trim(),addr:$('pl_addr').value.trim(),gstin:$('pl_gstin').value.trim()}));toast('Label details saved')}
+  catch{toast('Could not save in this browser')}
+};
+
+/* Print shipping label + invoice */
+const C128=['212222','222122','222221','121223','121322','131222','122213','122312','132212','221213','221312','231212','112232','122132','122231','113222','123122','123221','223211','221132','221231','213212','223112','312131','311222','321122','321221','312212','322112','322211','212123','212321','232121','111323','131123','131321','112313','132113','132311','211313','231113','231311','112133','112331','132131','113123','113321','133121','313121','211331','231131','213113','213311','213131','311123','311321','331121','312113','312311','332111','314111','221411','431111','111224','111422','121124','121421','141122','141221','112214','112412','122114','122411','142112','142211','241211','221114','413111','241112','134111','111242','121142','121241','114212','124112','124211','411212','421112','421211','212141','214121','412121','111143','111341','131141','114113','114311','411113','411311','113141','114131','311141','411131','211412','211214','211232','2331112'];
+function barcode(txt){
+  txt=String(txt).replace(/[^\x20-\x7E]/g,'');
+  const codes=[104];let sum=104;
+  [...txt].forEach((ch,i)=>{const c=ch.charCodeAt(0)-32;codes.push(c);sum+=c*(i+1)});
+  codes.push(sum%103,106);
+  let x=10,bars='';
+  codes.forEach(c=>{[...C128[c]].forEach((w,i)=>{const n=+w;if(i%2===0)bars+=`<rect x="${x}" y="0" width="${n}" height="60" fill="#000"/>`;x+=n})});
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${x+10} 60" preserveAspectRatio="none" style="width:100%;height:60px">${bars}</svg>`;
+}
+function printLabel(id){
+  const o=(window.OD||[]).find(x=>String(x.id)===String(id));if(!o)return;
+  const SELLER=getSeller(),addr=SELLER.addr||'(Settings tab-la return address add pannu)';
+  const paid=isPaid(o),d=new Date(o.createdAt).toLocaleDateString('en-IN');
+  const items=o.items.map(i=>{const pr=i.price??i.p;return `<tr><td>${esc(i.name)}</td><td>${i.qty}</td><td>${pr!=null?inr(pr):'-'}</td><td>${pr!=null?inr(pr*i.qty):'-'}</td></tr>`}).join('');
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Label #${esc(o.id)}</title>
+<style>
+@page{size:A5;margin:8mm}
+*{box-sizing:border-box}
+body{font-family:Arial,sans-serif;font-size:12px;color:#000;margin:0}
+.lbl{border:2px solid #000;width:100%}
+.row{display:flex}.row>div{padding:8px;flex:1}
+.b{border-bottom:2px solid #000}.r{border-right:2px solid #000}
+h4{margin:0 0 4px;font-size:12px}
+.cod{background:#000;color:#fff;font-weight:700;padding:5px 8px;font-size:13px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+table{width:100%;border-collapse:collapse;font-size:11px}
+th,td{border:1px solid #000;padding:4px;text-align:left}
+.big{font-size:20px;font-weight:800}
+.center{text-align:center;letter-spacing:2px;font-size:13px;font-weight:700}
+.sec{border:2px solid #000;margin-top:8px;padding:0}
+.sec>h4{padding:5px 8px;border-bottom:1px solid #000;background:#eee;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.sec .in{padding:8px}
+small{font-size:10px}
+</style></head><body>
+<div class="lbl">
+ <div class="row b">
+  <div class="r"><h4>Customer Address</h4><b>${esc(o.name)}</b><br>${esc(o.address).replace(/\n/g,'<br>')}<br>Ph: ${esc(o.phone)}</div>
+  <div style="padding:0">
+   <div class="cod">${paid?'PREPAID – Do not collect cash':'COD – Collect '+inr(o.total)}</div>
+   <div style="padding:8px"><div class="big">${esc(SELLER.name)}</div>
+   <div style="margin-top:6px">Order No: <b>#${esc(o.id)}</b></div>
+   <div style="margin-top:8px">${barcode('KZ'+o.id)}<div class="center">KZ${esc(o.id)}</div></div></div>
+  </div>
+ </div>
+ <div class="b" style="padding:8px"><h4>If undelivered, return to:</h4>${esc(SELLER.name)}<br>${esc(addr).replace(/\n/g,'<br>')}${SELLER.phone?'<br>Ph: '+esc(SELLER.phone):''}</div>
+ <div style="padding:8px"><h4>Product Details</h4>
+  <table><tr><th>Item</th><th>Qty</th></tr>${o.items.map(i=>`<tr><td>${esc(i.name)}</td><td>${i.qty}</td></tr>`).join('')}</table>
+ </div>
+</div>
+<div class="sec"><h4>TAX INVOICE / ORDER SUMMARY</h4><div class="in">
+ <div class="row" style="padding:0;margin-bottom:8px">
+  <div style="padding:0"><b>Bill To / Ship To</b><br>${esc(o.name)}<br>${esc(o.address).replace(/\n/g,'<br>')}</div>
+  <div style="padding:0"><b>Sold by</b><br>${esc(SELLER.name)}<br>${esc(addr).replace(/\n/g,'<br>')}${SELLER.gstin?'<br>GSTIN: '+esc(SELLER.gstin):''}<br>Invoice date: ${d}<br>Order: #${esc(o.id)}</div>
+ </div>
+ <table><tr><th>Description</th><th>Qty</th><th>Price</th><th>Amount</th></tr>${items}
+  <tr><td colspan="3">Shipping</td><td>${inr(o.shipping||0)}</td></tr>
+  <tr><td colspan="3"><b>Total</b></td><td><b>${inr(o.total)}</b></td></tr></table>
+ <small>Payment: ${paid?'Paid online':'Cash on delivery'}. This is a computer generated invoice and does not require signature.</small>
+</div></div>
+<script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script>
+</body></html>`;
+  const w=window.open('','_blank');
+  if(!w){toast('Allow pop-ups to print');return}
+  w.document.write(html);w.document.close();
+}
 </script>
 </body>
 </html>

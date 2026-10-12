@@ -8,6 +8,7 @@ const G=id=>P.find(p=>p.id==id);
 const ORG=["All","Japan","Korea","China"];
 const F={japan:"🇯🇵",korea:"🇰🇷",china:"🇨🇳"};
 let cat="All",sub="All",org="All",cart=JSON.parse(localStorage.getItem("kz_cart")||"{}");
+let sq=""; // search text that is actually applied (only changes on Search button / Enter / suggestion click)
 const $=id=>document.getElementById(id);
 let page=1;const PER=15; // 15 products per page
 const inr=n=>"₹"+n.toLocaleString("en-IN");
@@ -22,12 +23,12 @@ function nav(){
 }
 function render(){
   if(!$("grid"))return;
-  const q=$("q").value.trim().toLowerCase(),s=$("sort").value;
+  const q=sq.trim().toLowerCase(),s=$("sort").value;
   let l=P.filter(p=>(org=="All"||p.o==org)&&(q?(p.n+" "+p.c+" "+(p.sub||"")+" "+p.o).toLowerCase().includes(q):(cat=="All"||p.c==cat)&&(sub=="All"||p.sub==sub)));
   if(s=="1")l.sort((a,b)=>a.p-b.p);if(s=="2")l.sort((a,b)=>b.p-a.p);
   const total=l.length,pages=Math.max(1,Math.ceil(total/PER));if(page>pages)page=pages;
   l=l.slice((page-1)*PER,page*PER);
-  $("ttl").textContent=q?`Results for "${q}"`:cat=="All"?"All products":(sub!="All"?cat+" · "+sub:cat);
+  $("ttl").textContent=q?`Results for "${sq.trim()}"`:cat=="All"?"All products":(sub!="All"?cat+" · "+sub:cat);
   $("grid").innerHTML=l.length?l.map(p=>`<article class="card" data-href="/product.html?id=${p.id}"><a class="pic" href="/product.html?id=${p.id}" aria-label="View ${esc(p.n)}"><i>${F[p.o.toLowerCase()]} ${p.o}</i>${pic(p)}</a><div class="info"><h3><a href="/product.html?id=${p.id}">${esc(p.n)}</a></h3><small>${p.c}${p.sub?" · "+p.sub:""}</small><div class="pr">${inr(p.p)}<s>${inr(p.m)}</s><em>${Math.round((1-p.p/p.m)*100)}% off</em></div><button class="add" data-a="${p.id}">Add to cart</button><button class="add buy" data-b="${p.id}">Buy now</button></div></article>`).join(""):`<div class="empty">No products found. Try another search or category.</div>`;
   pager(pages,total);nav();
 }
@@ -53,7 +54,50 @@ function drawCart(){
 }
 function toast(m){const t=$("toast");t.textContent=m;t.classList.add("show");clearTimeout(toast.x);toast.x=setTimeout(()=>t.classList.remove("show"),1600)}
 function open(v){$("dr").classList.toggle("open",v);$("veil").classList.toggle("open",v)}
+
+/* ---------- Search: suggestions while typing, filter only on Search click / Enter ---------- */
+let sgI=-1;
+function hideSg(){const sg=$("sg");if(sg){sg.hidden=true;sg.innerHTML="";sgI=-1}}
+function suggest(){
+  const sg=$("sg");if(!sg)return;
+  const v=$("q").value.trim().toLowerCase();
+  if(!v||!P.length){hideSg();return}
+  const m=P.filter(p=>(p.n+" "+p.c+" "+(p.sub||"")).toLowerCase().includes(v)).slice(0,6);
+  sgI=-1;
+  sg.innerHTML=m.length
+    ?m.map(p=>`<button type="button" role="option" data-sg="${esc(p.n)}"><span class="sg-t">${p.img?`<img src="${esc(p.img)}" alt="">`:esc(p.e)}</span><span class="sg-x"><b>${esc(p.n)}</b><small>${esc(p.c)}${p.sub?" · "+esc(p.sub):""}</small></span></button>`).join("")
+    :`<div class="sg-none">No matching products</div>`;
+  sg.hidden=false;
+}
+function doSearch(){
+  const v=$("q").value.trim();
+  hideSg();
+  if($("grid")){sq=v;page=1;render();$("shop").scrollIntoView({behavior:"smooth"})}
+  else if(v)location.href="/?q="+encodeURIComponent(v);
+}
+$("q").oninput=()=>{
+  suggest();
+  if(!$("q").value.trim()&&sq){sq="";page=1;render()} // search box cleared -> show all products again
+};
+$("q").onfocus=suggest;
+$("q").onkeydown=e=>{
+  const sg=$("sg"),items=sg&&!sg.hidden?[...sg.querySelectorAll("button[data-sg]")]:[];
+  if(e.key==="ArrowDown"||e.key==="ArrowUp"){
+    if(!items.length)return;e.preventDefault();
+    sgI=e.key==="ArrowDown"?(sgI+1)%items.length:(sgI<=0?items.length-1:sgI-1);
+    items.forEach((b,i)=>b.classList.toggle("hit",i===sgI));
+  }else if(e.key==="Enter"){
+    e.preventDefault();
+    if(sgI>=0&&items[sgI])$("q").value=items[sgI].dataset.sg;
+    doSearch();
+  }else if(e.key==="Escape")hideSg();
+};
+if($("sb"))$("sb").onclick=doSearch;
+
 document.addEventListener("click",e=>{
+  const sgb=e.target.closest("#sg button[data-sg]");
+  if(sgb){$("q").value=sgb.dataset.sg;doSearch();return}
+  if(!e.target.closest(".search"))hideSg();
   const cd=e.target.closest(".card[data-href]");
   if(cd&&!e.target.closest("button,a")&&!e.metaKey&&!e.ctrlKey){location.href=cd.dataset.href;return}
   const b=e.target.closest("button");if(!b)return;
@@ -66,13 +110,13 @@ document.addEventListener("click",e=>{
   if(b.dataset.d){const i=b.dataset.i;cart[i]+=+b.dataset.d;if(cart[i]<1)delete cart[i];drawCart()}
 });
 $("cb").onclick=()=>open(true);$("cx").onclick=()=>open(false);$("veil").onclick=()=>open(false);
-$("q").oninput=()=>{page=1;render()};if($("sort"))$("sort").onchange=()=>{page=1;render()};
+if($("sort"))$("sort").onchange=()=>{page=1;render()};
 $("co").onclick=()=>{
   if(!Object.keys(cart).length)return toast("Cart is empty");
   if(!localStorage.getItem("kz_token")){location.href="/login.html?next=/checkout.html";return}
   location.href="/checkout.html";
 };
-const qp=new URLSearchParams(location.search).get("q");if(qp&&$("grid"))$("q").value=qp;
+const qp=new URLSearchParams(location.search).get("q");if(qp&&$("grid")){$("q").value=qp;sq=qp}
 fetch("/api/products").then(r=>r.json()).then(d=>{P=d;render();drawCart()}).catch(()=>{$("grid").innerHTML='<div class="empty">Could not load products. Is the server running?</div>'});
 
 function applySettings(){

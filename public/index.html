@@ -10,7 +10,11 @@
 <body>
 <header>
   <span class="logo">kimizo</span>
-  <div class="search"><input id="q" placeholder="Search for unique finds..." aria-label="Search products"><button type="button">Search</button></div>
+  <div class="search">
+    <input id="q" placeholder="Search for unique finds..." aria-label="Search products" autocomplete="off" enterkeyhint="search">
+    <button type="button" id="sb">Search</button>
+    <div class="sg" id="sg" role="listbox" aria-label="Search suggestions" hidden></div>
+  </div>
   <div id="auth"></div>
   <button class="cartbtn" id="cb" aria-label="Open cart">🛒<b id="cc">0</b></button>
 </header>
