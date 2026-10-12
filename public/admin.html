@@ -254,6 +254,7 @@ function printLabel(id){
   const o=(window.OD||[]).find(x=>String(x.id)===String(id));if(!o)return;
   const SELLER=getSeller(),addr=SELLER.addr||'(Settings tab-la return address add pannu)';
   const paid=isPaid(o),d=new Date(o.createdAt).toLocaleDateString('en-IN');
+  const retHtml=esc(SELLER.name)+'<br>'+esc(addr).replace(/\n/g,'<br>')+(SELLER.phone?'<br>Ph: '+esc(SELLER.phone):'');
   const items=o.items.map(i=>{const pr=i.price??i.p;return `<tr><td>${esc(i.name)}</td><td>${i.qty}</td><td>${pr!=null?inr(pr):'-'}</td><td>${pr!=null?inr(pr*i.qty):'-'}</td></tr>`}).join('');
   const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Label #${esc(o.id)}</title>
 <style>
@@ -290,7 +291,7 @@ small{font-size:10px}
    <div style="margin-top:8px">${barcode('KZ'+o.id)}<div class="center">KZ${esc(o.id)}</div></div></div>
   </div>
  </div>
- <div class="b" style="padding:8px"><h4>If undelivered, return to:</h4><div id="ret" class="edit" contenteditable="true">${esc(SELLER.name)}<br>${esc(addr).replace(/\n/g,'<br>')}${SELLER.phone?'<br>Ph: '+esc(SELLER.phone):''}</div></div>
+ <div class="b" style="padding:8px"><h4>If undelivered, return to:</h4><div id="ret" class="edit" contenteditable="true">${retHtml}</div></div>
  <div style="padding:8px"><h4>Product Details</h4>
   <table><tr><th>Item</th><th style="width:40px">Qty</th><th style="width:110px">Order No.</th><th style="width:80px">Date</th></tr>${o.items.map(i=>`<tr><td>${esc(i.name)}</td><td>${i.qty}</td><td><b>#${esc(o.id)}</b></td><td>${d}</td></tr>`).join('')}</table>
  </div>
@@ -298,7 +299,7 @@ small{font-size:10px}
 <div class="sec"><h4>TAX INVOICE / ORDER SUMMARY</h4><div class="in">
  <div class="row" style="padding:0;margin-bottom:8px">
   <div style="padding:0"><b>Bill To / Ship To</b><br>${esc(o.name)}<br>${esc(o.address).replace(/\n/g,'<br>')}</div>
-  <div style="padding:0"><b>Sold by</b><br>${esc(SELLER.name)}<br>${esc(addr).replace(/\n/g,'<br>')}${SELLER.gstin?'<br>GSTIN: '+esc(SELLER.gstin):''}<br>Invoice date: ${d}<br>Order: #${esc(o.id)}</div>
+  <div style="padding:0"><b>Sold by</b><br><div id="sold">${retHtml}</div>${SELLER.gstin?'GSTIN: '+esc(SELLER.gstin)+'<br>':''}Invoice date: ${d}<br>Order: #${esc(o.id)}</div>
  </div>
  <table><tr><th>Description</th><th>Qty</th><th>Price</th><th>Amount</th></tr>${items}
   <tr><td colspan="3">Shipping</td><td>${inr(o.shipping||0)}</td></tr>
@@ -306,14 +307,20 @@ small{font-size:10px}
  <small>Payment: ${paid?'Paid online':'Cash on delivery'}. This is a computer generated invoice and does not require signature.</small>
 </div></div>
 <script>
+var retEl=document.getElementById('ret'),soldEl=document.getElementById('sold');
+retEl.addEventListener('input',function(){soldEl.innerHTML=retEl.innerHTML});
 function saveRet(){
-  var L=document.getElementById('ret').innerText.split('\n').map(function(s){return s.trim()}).filter(Boolean);
-  var ph='',rest=[];
-  L.slice(1).forEach(function(s){if(/^ph:/i.test(s))ph=s.replace(/^ph:\s*/i,'');else rest.push(s)});
-  var s={};try{s=JSON.parse(localStorage.getItem('kz_seller')||'{}')}catch(e){}
-  s.name=L[0]||s.name||'';s.addr=rest.join('\n');s.phone=ph;
-  localStorage.setItem('kz_seller',JSON.stringify(s));
-  alert('Return address saved. Next labels-la idhe varum.');
+  try{
+    var L=retEl.innerText.split('\\n').map(function(s){return s.trim()}).filter(Boolean);
+    var ph='',rest=[];
+    L.slice(1).forEach(function(s){if(/^ph:/i.test(s))ph=s.replace(/^ph:\\s*/i,'');else rest.push(s)});
+    var ls=(window.opener&&window.opener.localStorage)||localStorage;
+    var s={};try{s=JSON.parse(ls.getItem('kz_seller')||'{}')}catch(e){}
+    s.name=L[0]||s.name||'';s.addr=rest.join('\\n');s.phone=ph;
+    ls.setItem('kz_seller',JSON.stringify(s));
+    try{if(window.opener&&window.opener.loadSeller)window.opener.loadSeller()}catch(e){}
+    alert('Return address saved. Next labels-la idhe varum.');
+  }catch(err){alert('Save aagala: '+err.message)}
 }
 <\/script>
 </body></html>`;
