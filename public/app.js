@@ -10,7 +10,13 @@ const F={japan:"🇯🇵",korea:"🇰🇷",china:"🇨🇳"};
 let cat="All",sub="All",org="All",cart=JSON.parse(localStorage.getItem("kz_cart")||"{}");
 let sq=""; // search text that is actually applied (only changes on Search button / Enter / suggestion click)
 const $=id=>document.getElementById(id);
-let page=1;const PER=15; // 15 products per page
+let page=1,PER=15;
+// products per page = full rows only (columns x rows), so every row is even on desktop and mobile
+function calcPer(){
+  const g=$("grid");if(!g)return 15;
+  const cols=window.innerWidth<=700?2:Math.max(1,Math.floor((g.clientWidth+22)/232)); // 210px min card + 22px gap
+  return cols*Math.max(1,Math.round(15/cols));
+}
 const inr=n=>"₹"+n.toLocaleString("en-IN");
 function nav(){
   const cats=["All",...new Set(P.map(p=>p.c))];
@@ -26,6 +32,7 @@ function render(){
   const q=sq.trim().toLowerCase(),s=$("sort").value;
   let l=P.filter(p=>(org=="All"||p.o==org)&&(q?(p.n+" "+p.c+" "+(p.sub||"")+" "+p.o).toLowerCase().includes(q):(cat=="All"||p.c==cat)&&(sub=="All"||p.sub==sub)));
   if(s=="1")l.sort((a,b)=>a.p-b.p);if(s=="2")l.sort((a,b)=>b.p-a.p);
+  PER=calcPer();
   const total=l.length,pages=Math.max(1,Math.ceil(total/PER));if(page>pages)page=pages;
   l=l.slice((page-1)*PER,page*PER);
   $("ttl").textContent=q?`Results for "${sq.trim()}"`:cat=="All"?"All products":(sub!="All"?cat+" · "+sub:cat);
@@ -111,6 +118,7 @@ document.addEventListener("click",e=>{
 });
 $("cb").onclick=()=>open(true);$("cx").onclick=()=>open(false);$("veil").onclick=()=>open(false);
 if($("sort"))$("sort").onchange=()=>{page=1;render()};
+let rz;window.addEventListener("resize",()=>{clearTimeout(rz);rz=setTimeout(()=>{if($("grid")&&P.length&&calcPer()!==PER)render()},150)});
 $("co").onclick=()=>{
   if(!Object.keys(cart).length)return toast("Cart is empty");
   if(!localStorage.getItem("kz_token")){location.href="/login.html?next=/checkout.html";return}
