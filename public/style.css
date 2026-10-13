@@ -264,3 +264,27 @@ body{overflow-x:clip}
   .subs{padding:12px 3vw 8px;gap:8px}
   .subs button{font-size:13px;padding:4px 13px}
 }
+/* ---- feature stickers ---- */
+.perks div{position:relative;overflow:hidden;display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 12px;font-size:13px;transition:transform .15s,box-shadow .15s}
+.perks div::before{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(rgba(0,0,0,.13) 1.4px,transparent 1.7px) 0 0/9px 9px}
+.perks div:nth-child(n):hover{transform:rotate(0) translate(-2px,-3px);box-shadow:7px 7px 0 var(--ink)}
+.perks .pi{position:relative;z-index:1;width:50px;height:50px;display:grid;place-items:center;font-size:24px;line-height:1;background:#fff;border:3px solid var(--ink);border-radius:50%;box-shadow:3px 3px 0 var(--ink);transform:rotate(-8deg);transition:transform .15s}
+.perks div:nth-child(even) .pi{transform:rotate(8deg)}
+.perks div:hover .pi{transform:rotate(0) scale(1.12)}
+.perks b{position:relative;z-index:1;font-size:14px;line-height:1.25}
+
+/* ---- sort dropdown ("Featured") ---- */
+.bar select{
+  -webkit-appearance:none;appearance:none;cursor:pointer;
+  padding:7px 44px 7px 18px;border-radius:99px;font-weight:700;
+  background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='26' viewBox='0 0 26 26'%3E%3Ccircle cx='13' cy='13' r='11' fill='%23FFD23F' stroke='%23111' stroke-width='3'/%3E%3Cpath d='M8 11l5 5 5-5' fill='none' stroke='%23111' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 8px center/24px;
+  box-shadow:4px 4px 0 var(--ink);transition:transform .1s,box-shadow .1s}
+.bar select:hover{transform:translate(-2px,-2px) rotate(-1deg);box-shadow:6px 6px 0 var(--ink)}
+.bar select:active{transform:translate(3px,3px);box-shadow:0 0 0 var(--ink)}
+.bar select option{font-weight:500}
+@media(max-width:700px){
+  .perks div{padding:12px 8px}
+  .perks .pi{width:42px;height:42px;font-size:20px}
+  .perks b{font-size:13px}
+  .bar select{box-shadow:3px 3px 0 var(--ink)}
+}
