@@ -131,7 +131,7 @@ if($("sort"))$("sort").onchange=()=>{page=1;render()};
   wrap.innerHTML='<button type="button" class="dd-btn" aria-haspopup="listbox" aria-expanded="false"><span class="dd-l"></span></button><ul class="dd-list" role="listbox" tabindex="-1" hidden></ul>';
   sel.after(wrap);
   const btn=wrap.querySelector(".dd-btn"),lab=wrap.querySelector(".dd-l"),ul=wrap.querySelector(".dd-list");
-  const ic=["⭐","💸","💎"];
+  const ic=["⭐","💸","💎","🆕","🔥","🔤"];
   ul.innerHTML=[...sel.options].map((o,i)=>`<li role="option" tabindex="-1" data-v="${esc(o.value)}">${ic[i]||""} ${esc(o.text)}</li>`).join("");
   const lis=()=>[...ul.querySelectorAll("li")];
   function sync(){
@@ -179,19 +179,3 @@ fetch("/api/settings").then(r=>r.json()).then(s=>{S=s;applySettings();drawCart()
 const U=JSON.parse(localStorage.getItem("kz_user")||"null");
 $("auth").innerHTML=U?'<a href="/orders.html">My orders</a>'+(U.role==="admin"?'<a href="/admin">Admin panel</a>':"")+`<span>Hi, ${esc(U.name.split(" ")[0])}</span><a href="#" id="lo">Logout</a>`:'<a href="/login.html">Login / Sign up</a>';
 if($("lo"))$("lo").onclick=e=>{e.preventDefault();localStorage.removeItem("kz_token");localStorage.removeItem("kz_user");location.reload()};
-
-/* ---------- Custom pop-art sort dropdown (replaces the native list, #sort stays as the data source) ---------- */
-(function initSort(){
-  const sel=$("sort");if(!sel)return;
-  const w=document.createElement("div");w.className="dd";
-  w.innerHTML=`<button type="button" class="dd-b" aria-haspopup="listbox" aria-expanded="false"><span></span></button><div class="dd-l" role="listbox" hidden>${[...sel.options].map(o=>`<button type="button" role="option" data-v="${o.value}">${esc(o.textContent)}</button>`).join("")}</div>`;
-  sel.after(w);
-  const b=w.querySelector(".dd-b"),l=w.querySelector(".dd-l");
-  const sync=()=>{b.firstElementChild.textContent="Sort: "+sel.options[sel.selectedIndex].textContent;l.querySelectorAll("button").forEach(x=>{const on=x.dataset.v===sel.value;x.classList.toggle("on",on);x.setAttribute("aria-selected",on)})};
-  const close=()=>{l.hidden=true;b.setAttribute("aria-expanded","false")};
-  b.onclick=()=>{const open=l.hidden;l.hidden=!open;b.setAttribute("aria-expanded",open)};
-  l.onclick=e=>{const x=e.target.closest("button[data-v]");if(!x)return;sel.value=x.dataset.v;sel.dispatchEvent(new Event("change"));sync();close()};
-  document.addEventListener("click",e=>{if(!w.contains(e.target))close()});
-  document.addEventListener("keydown",e=>{if(e.key==="Escape")close()});
-  sync();
-})();
