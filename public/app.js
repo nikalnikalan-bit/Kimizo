@@ -195,3 +195,18 @@ if($("lo"))$("lo").onclick=e=>{e.preventDefault();localStorage.removeItem("kz_to
   document.addEventListener("keydown",e=>{if(e.key==="Escape")close()});
   sync();
 })();
+
+/* ---------- remove the old plain "Sort: Featured" buttons (leftover from an earlier version) ---------- */
+(function(){
+  const OLD=/^(Sort:|Featured$|Price: low to high$|Price: high to low$)/i;
+  function kill(){
+    document.querySelectorAll("button").forEach(b=>{
+      if(b.closest(".dd,.chips,#nav,#subs,.drawer,.pager,.card"))return;
+      if(!OLD.test(b.textContent.trim().replace(/^[^\w]+/,"")))return;
+      const w=b.parentElement;
+      // if the old buttons sit in their own little wrapper, remove the wrapper too
+      if(w&&w!==document.body&&!w.matches(".bar,header,main,body")&&!w.querySelector("input,select,h2,.dd,.chips"))w.remove();else b.remove();
+    });
+  }
+  kill();new MutationObserver(kill).observe(document.body,{childList:true,subtree:true});
+})();
