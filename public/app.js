@@ -3,7 +3,7 @@ let P=[],S={shippingFee:0,freeAbove:0};
 function shipCalc(lines){let sub=0,manual=0,hasDef=false;lines.forEach(([p,q])=>{sub+=p.p*q;if(p.ship!=null&&p.ship!=="")manual+=Number(p.ship)*q;else hasDef=true});
   const def=hasDef&&sub>0&&!(S.freeAbove>0&&sub>=S.freeAbove)?S.shippingFee:0;return{amt:manual+def,hasDef,sub}}
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const pic=p=>p.img?`<img src="${esc(p.img)}" alt="${esc(p.n)}">`:p.e;
+const pic=p=>p.img?`<img src="${esc(p.img)}" alt="${esc(p.n)}">`:`<span class="emo">${p.e}</span>`;
 const G=id=>P.find(p=>p.id==id);
 const ORG=["All","Japan","Korea","China"];
 const F={japan:"🇯🇵",korea:"🇰🇷",china:"🇨🇳"};
@@ -31,7 +31,12 @@ function render(){
   if(!$("grid"))return;
   const q=sq.trim().toLowerCase(),s=$("sort").value;
   let l=P.filter(p=>(org=="All"||p.o==org)&&(q?(p.n+" "+p.c+" "+(p.sub||"")+" "+p.o).toLowerCase().includes(q):(cat=="All"||p.c==cat)&&(sub=="All"||p.sub==sub)));
-  if(s=="1")l.sort((a,b)=>a.p-b.p);if(s=="2")l.sort((a,b)=>b.p-a.p);
+  const dc=x=>x.m>0?1-x.p/x.m:0;
+  if(s=="1")l.sort((a,b)=>a.p-b.p);
+  if(s=="2")l.sort((a,b)=>b.p-a.p);
+  if(s=="3")l.sort((a,b)=>(+b.id||0)-(+a.id||0));      // newest = highest id first
+  if(s=="4")l.sort((a,b)=>dc(b)-dc(a));                // biggest % discount first
+  if(s=="5")l.sort((a,b)=>String(a.n).localeCompare(String(b.n)));
   PER=calcPer();
   const total=l.length,pages=Math.max(1,Math.ceil(total/PER));if(page>pages)page=pages;
   l=l.slice((page-1)*PER,page*PER);
@@ -118,6 +123,39 @@ document.addEventListener("click",e=>{
 });
 $("cb").onclick=()=>open(true);$("cx").onclick=()=>open(false);$("veil").onclick=()=>open(false);
 if($("sort"))$("sort").onchange=()=>{page=1;render()};
+/* ---------- Custom pop-art sort dropdown (replaces the native select, which stays hidden and keeps the value) ---------- */
+(function(){
+  const sel=$("sort");if(!sel)return;
+  sel.style.display="none";
+  const wrap=document.createElement("div");wrap.className="dd";
+  wrap.innerHTML='<button type="button" class="dd-btn" aria-haspopup="listbox" aria-expanded="false"><span class="dd-l"></span></button><ul class="dd-list" role="listbox" tabindex="-1" hidden></ul>';
+  sel.after(wrap);
+  const btn=wrap.querySelector(".dd-btn"),lab=wrap.querySelector(".dd-l"),ul=wrap.querySelector(".dd-list");
+  const ic=["⭐","💸","💎"];
+  ul.innerHTML=[...sel.options].map((o,i)=>`<li role="option" tabindex="-1" data-v="${esc(o.value)}">${ic[i]||""} ${esc(o.text)}</li>`).join("");
+  const lis=()=>[...ul.querySelectorAll("li")];
+  function sync(){
+    lab.textContent=(ic[sel.selectedIndex]||"")+" "+sel.options[sel.selectedIndex].text;
+    lis().forEach(li=>{const on=li.dataset.v===sel.value;li.classList.toggle("on",on);li.setAttribute("aria-selected",on)});
+  }
+  function toggle(v){ul.hidden=!v;wrap.classList.toggle("open",v);btn.setAttribute("aria-expanded",v)}
+  function pick(li){sel.value=li.dataset.v;sync();toggle(false);btn.focus();page=1;render()}
+  btn.onclick=e=>{e.stopPropagation();toggle(ul.hidden)};
+  btn.onkeydown=e=>{
+    if(e.key==="ArrowDown"||e.key==="ArrowUp"){e.preventDefault();toggle(true);(ul.querySelector("li.on")||lis()[0]).focus()}
+    else if(e.key==="Escape")toggle(false);
+  };
+  ul.onclick=e=>{const li=e.target.closest("li");if(li)pick(li)};
+  ul.onkeydown=e=>{
+    const a=lis(),i=a.indexOf(document.activeElement);
+    if(e.key==="ArrowDown"){e.preventDefault();a[(i+1)%a.length].focus()}
+    else if(e.key==="ArrowUp"){e.preventDefault();a[(i-1+a.length)%a.length].focus()}
+    else if(e.key==="Enter"||e.key===" "){e.preventDefault();if(a[i])pick(a[i])}
+    else if(e.key==="Escape"){toggle(false);btn.focus()}
+  };
+  document.addEventListener("click",e=>{if(!wrap.contains(e.target))toggle(false)});
+  sync();
+})();
 let rz;window.addEventListener("resize",()=>{clearTimeout(rz);rz=setTimeout(()=>{if($("grid")&&P.length&&calcPer()!==PER)render()},150)});
 $("co").onclick=()=>{
   if(!Object.keys(cart).length)return toast("Cart is empty");
@@ -141,3 +179,19 @@ fetch("/api/settings").then(r=>r.json()).then(s=>{S=s;applySettings();drawCart()
 const U=JSON.parse(localStorage.getItem("kz_user")||"null");
 $("auth").innerHTML=U?'<a href="/orders.html">My orders</a>'+(U.role==="admin"?'<a href="/admin">Admin panel</a>':"")+`<span>Hi, ${esc(U.name.split(" ")[0])}</span><a href="#" id="lo">Logout</a>`:'<a href="/login.html">Login / Sign up</a>';
 if($("lo"))$("lo").onclick=e=>{e.preventDefault();localStorage.removeItem("kz_token");localStorage.removeItem("kz_user");location.reload()};
+
+/* ---------- Custom pop-art sort dropdown (replaces the native list, #sort stays as the data source) ---------- */
+(function initSort(){
+  const sel=$("sort");if(!sel)return;
+  const w=document.createElement("div");w.className="dd";
+  w.innerHTML=`<button type="button" class="dd-b" aria-haspopup="listbox" aria-expanded="false"><span></span></button><div class="dd-l" role="listbox" hidden>${[...sel.options].map(o=>`<button type="button" role="option" data-v="${o.value}">${esc(o.textContent)}</button>`).join("")}</div>`;
+  sel.after(w);
+  const b=w.querySelector(".dd-b"),l=w.querySelector(".dd-l");
+  const sync=()=>{b.firstElementChild.textContent="Sort: "+sel.options[sel.selectedIndex].textContent;l.querySelectorAll("button").forEach(x=>{const on=x.dataset.v===sel.value;x.classList.toggle("on",on);x.setAttribute("aria-selected",on)})};
+  const close=()=>{l.hidden=true;b.setAttribute("aria-expanded","false")};
+  b.onclick=()=>{const open=l.hidden;l.hidden=!open;b.setAttribute("aria-expanded",open)};
+  l.onclick=e=>{const x=e.target.closest("button[data-v]");if(!x)return;sel.value=x.dataset.v;sel.dispatchEvent(new Event("change"));sync();close()};
+  document.addEventListener("click",e=>{if(!w.contains(e.target))close()});
+  document.addEventListener("keydown",e=>{if(e.key==="Escape")close()});
+  sync();
+})();
