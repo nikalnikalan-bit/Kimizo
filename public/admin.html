@@ -45,7 +45,7 @@ th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);vertical-a
 <header>
   <span class="logo">kimizo admin</span><a href="/" target="_blank">View store</a>
   <div class="tabs" id="tabs">
-    <button data-t="products" class="on">Products</button><button data-t="orders">Orders</button><button data-t="settings">Settings</button><button data-t="out">Log out</button>
+    <button data-t="products" class="on">Products</button><button data-t="orders">Orders</button><button data-t="reviews">Reviews</button><button data-t="settings">Settings</button><button data-t="out">Log out</button>
   </div>
 </header>
 <main>
@@ -75,6 +75,11 @@ th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);vertical-a
         </div>
       </div>
     </div>
+    <label>More photos (optional · up to 5 · shown as a gallery on the product page)</label>
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <input id="pxf" type="file" accept="image/*" multiple style="width:auto;max-width:100%">
+      <div id="pxl" style="display:flex;gap:12px;flex-wrap:wrap"></div>
+    </div>
     <label>Product description (shown on the product page; new line = new line)</label>
     <textarea id="pd" rows="4" maxlength="2000" placeholder="Material, size, what's in the box, how to use..."></textarea>
     <p style="margin:14px 0 0"><button class="btn" id="save">Add product</button> <button class="btn o" id="cancel" hidden>Cancel edit</button></p>
@@ -85,6 +90,8 @@ th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);vertical-a
 </section>
 
 <section id="t-orders" hidden><div class="box"><h2>Orders</h2><div id="olist"></div></div></section>
+
+<section id="t-reviews" hidden><div class="box"><h2>Customer reviews</h2><div id="rvlist"></div></div></section>
 
 <section id="t-settings" hidden>
 <div class="box">
@@ -122,7 +129,7 @@ th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);vertical-a
 <div id="toast" hidden></div>
 
 <script>
-const TOKEN=localStorage.getItem('kz_token')||'';let PR=[];
+const TOKEN=localStorage.getItem('kz_token')||'';let PR=[],PX=[];
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const inr=n=>'₹'+Number(n).toLocaleString('en-IN');
@@ -142,8 +149,9 @@ $('tabs').onclick=e=>{
   const t=e.target.dataset.t;if(!t)return;
   if(t==='out'){bye();return}
   document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
-  ['products','orders','settings'].forEach(x=>$('t-'+x).hidden=x!==t);
+  ['products','orders','reviews','settings'].forEach(x=>$('t-'+x).hidden=x!==t);
   if(t==='orders')loadOrders();
+  if(t==='reviews')loadReviews();
 };
 
 /* Image upload */
@@ -179,6 +187,25 @@ $('pf').onchange=async()=>{
   }catch(e){toast(e.message);$('pf').value=''}
 };
 
+async function uploadImg(f){
+  if(f.size>25*1024*1024)throw new Error('Image must be under 25 MB');
+  const blob=await prepImage(f);
+  if(blob.size>1.4*1024*1024)throw new Error('Image is too large even after compression');
+  const r=await fetch('/api/upload',{method:'POST',headers:{'Content-Type':blob.type,Authorization:'Bearer '+TOKEN},body:blob});
+  const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'Upload failed');
+  return d.url;
+}
+/* Extra photos (gallery) */
+function drawPX(){$('pxl').innerHTML=PX.map((u,i)=>`<div style="position:relative"><div class="th" style="width:60px;height:60px"><img src="${esc(u)}" alt=""></div><button type="button" class="btn s" data-pxrm="${i}" aria-label="Remove photo" style="position:absolute;top:-8px;right:-8px;padding:0;width:22px;height:22px;border-radius:50%;line-height:1">✕</button></div>`).join('')}
+$('pxl').onclick=e=>{const i=e.target.dataset.pxrm;if(i!==undefined){PX.splice(+i,1);drawPX()}};
+$('pxf').onchange=async()=>{
+  const files=[...$('pxf').files];$('pxf').value='';
+  const room=5-PX.length;if(room<=0){toast('Maximum 5 extra photos');return}
+  toast('Uploading...');
+  try{for(const f of files.slice(0,room)){PX.push(await uploadImg(f));drawPX()}toast('Photos uploaded')}
+  catch(e){toast(e.message)}
+};
+
 /* Products */
 async function loadProducts(){
   PR=await api('/api/products');
@@ -187,16 +214,16 @@ async function loadProducts(){
   $('cats').innerHTML=[...new Set(PR.map(p=>p.c))].map(c=>`<option value="${esc(c)}">`).join('');
   $('plist').innerHTML=PR.map(p=>`<tr><td><div class="th">${p.img?`<img src="${esc(p.img)}" alt="">`:esc(p.e)}</div></td><td>${esc(p.n)}</td><td>${esc(p.c)}${p.sub?' · '+esc(p.sub):''}</td><td>${esc(p.o)}</td><td>${inr(p.p)}${p.m>p.p?` <small style="color:var(--mute)"><s>${inr(p.m)}</s></small>`:''}</td><td>${p.ship==null||p.ship===''?'<small style="color:var(--mute)">default</small>':(Number(p.ship)>0?inr(p.ship):'Free')}</td><td style="white-space:nowrap"><button class="btn o s" data-edit="${p.id}">Edit</button> <button class="btn o s" data-del="${p.id}">Delete</button></td></tr>`).join('')||'<tr><td colspan="7">No products yet.</td></tr>';
 }
-function resetForm(){['pid','pn','pc','ps','pp','pm','pe','psh','pi','pd'].forEach(i=>$(i).value='');$('ftitle').textContent='Add new product';$('save').textContent='Add product';$('cancel').hidden=true;showPrev('')}
+function resetForm(){['pid','pn','pc','ps','pp','pm','pe','psh','pi','pd'].forEach(i=>$(i).value='');$('ftitle').textContent='Add new product';$('save').textContent='Add product';$('cancel').hidden=true;showPrev('');PX=[];drawPX()}
 $('cancel').onclick=resetForm;
 $('save').onclick=async()=>{
-  const id=$('pid').value,b={n:$('pn').value,c:$('pc').value,sub:$('ps').value,o:$('po').value,p:$('pp').value,m:$('pm').value||$('pp').value,e:$('pe').value||'📦',ship:$('psh').value,img:$('pi').value,desc:$('pd').value};
+  const id=$('pid').value,b={n:$('pn').value,c:$('pc').value,sub:$('ps').value,o:$('po').value,p:$('pp').value,m:$('pm').value||$('pp').value,e:$('pe').value||'📦',ship:$('psh').value,img:$('pi').value,imgs:PX,desc:$('pd').value};
   try{await api(id?'/api/products/'+id:'/api/products',id?'PUT':'POST',b);toast(id?'Product updated':'Product added');resetForm();loadProducts()}
   catch(e){toast(e.message)}
 };
 $('plist').onclick=async e=>{
   const ed=e.target.dataset.edit,dl=e.target.dataset.del;
-  if(ed){const p=PR.find(x=>x.id==ed);$('pid').value=p.id;$('pn').value=p.n;$('pc').value=p.c;$('ps').value=p.sub||'';$('po').value=p.o;$('pp').value=p.p;$('pm').value=p.m;$('pe').value=p.e;$('psh').value=p.ship==null?'':p.ship;$('pd').value=p.desc||'';showPrev(p.img);$('ftitle').textContent='Edit product';$('save').textContent='Update product';$('cancel').hidden=false;scrollTo({top:0,behavior:'smooth'})}
+  if(ed){const p=PR.find(x=>x.id==ed);$('pid').value=p.id;$('pn').value=p.n;$('pc').value=p.c;$('ps').value=p.sub||'';$('po').value=p.o;$('pp').value=p.p;$('pm').value=p.m;$('pe').value=p.e;$('psh').value=p.ship==null?'':p.ship;$('pd').value=p.desc||'';showPrev(p.img);PX=Array.isArray(p.imgs)?[...p.imgs]:[];drawPX();$('ftitle').textContent='Edit product';$('save').textContent='Update product';$('cancel').hidden=false;scrollTo({top:0,behavior:'smooth'})}
   if(dl&&confirm('Delete this product?')){try{await api('/api/products/'+dl,'DELETE');toast('Product deleted');loadProducts()}catch(x){toast(x.message)}}
 };
 
@@ -224,6 +251,16 @@ $('olist').onclick=async e=>{
   const id=e.target.dataset.upd;if(!id)return;
   const status=document.querySelector(`select[data-oid="${id}"]`).value,note=document.querySelector(`input[data-note="${id}"]`).value;
   try{await api('/api/orders/'+id,'PATCH',{status,note});toast('Tracking updated');loadOrders()}catch(x){toast(x.message)}
+};
+
+/* Reviews (moderation) */
+async function loadReviews(){
+  const R=await api('/api/reviews');
+  $('rvlist').innerHTML=R.map(r=>`<div class="ord"><div style="flex:1;min-width:220px"><b>${esc(r.productName)}</b><br><span style="color:#FFB400">${'★'.repeat(r.rating)}</span><span style="color:var(--line)">${'★'.repeat(5-r.rating)}</span> · ${esc(r.name)}${r.verified?' · <small style="color:#2FBF71">✔ verified buyer</small>':''}<br><small>${new Date(r.createdAt).toLocaleString('en-IN')}</small>${r.text?'<br>'+esc(r.text):''}${(r.images||[]).length?`<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">${r.images.map(u=>`<a href="${esc(u)}" target="_blank" rel="noopener"><div class="th" style="width:60px;height:60px"><img src="${esc(u)}" alt=""></div></a>`).join('')}</div>`:''}</div><div><button class="btn o s" data-rvdel="${r.id}">Delete</button></div></div>`).join('')||'<p>No reviews yet.</p>';
+}
+$('rvlist').onclick=async e=>{
+  const id=e.target.dataset.rvdel;
+  if(id&&confirm('Delete this review?')){try{await api('/api/reviews/'+id,'DELETE');toast('Review deleted');loadReviews()}catch(x){toast(x.message)}}
 };
 
 /* Settings */

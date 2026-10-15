@@ -15,7 +15,8 @@ const cache = {
   users: [],
   products: [],
   orders: [],
-  settings: {}
+  settings: {},
+  reviews: []
 };
 
 const file = n => path.join(__dirname, 'data', n + '.json');
@@ -35,6 +36,14 @@ const write = (n, d) => {
   return writeToDrive(n, d).catch(err => console.error(`Failed to sync ${n} to Drive:`, err.message));
 };
 
+// Reviews are loaded on their own, so a missing reviews.json in Drive can never block users/products/orders from loading
+const loadReviews = async () => {
+  try {
+    const r = await readFromDrive('reviews');
+    if (Array.isArray(r) && r.length) cache.reviews = r;
+  } catch (e) { console.warn('Reviews load warning:', e.message); }
+};
+
 app.use(express.json({ verify: (req, res, buf) => { req.rawBody = buf; } })); // rawBody is needed for the Razorpay webhook signature
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -52,6 +61,7 @@ app.use(async (req, res, next) => {
       if (Array.isArray(p) && p.length) cache.products = p;
       if (Array.isArray(o) && o.length) cache.orders = o;
       if (s && typeof s === 'object' && Object.keys(s).length) cache.settings = s;
+      await loadReviews();
     } catch (e) {
       console.warn('Drive background load warning:', e.message);
     }
@@ -146,7 +156,7 @@ app.get('/login', (req, res) => res.sendFile(path.join(__dirname, 'public', 'log
 // Load extra auth endpoints (Google Login + Custom OTP Flow)
 require('./auth-extra')(app, { users, write, publicUser, hashPassword, signToken, SECRET, normPhone });
 
-// ---------- Image upload (admin only) ----------
+// ---------- Image upload (any logged-in user: admin for products, customers for review photos) ----------
 const UP = path.join(__dirname, 'public', 'uploads');
 try { fs.mkdirSync(UP, { recursive: true }); } catch (_) {}
 const sniff = b => {
@@ -201,7 +211,18 @@ app.get('/api/img/:id', async (req, res) => {
   } catch (e) { console.error('Image read failed:', e.message); res.status(500).end(); }
 });
 
-app.post('/api/upload', admin,
+// customers may upload review photos, but only a limited number per hour (admins are not limited)
+const upTries = {};
+const uploadLimit = (req, res, next) => {
+  if (req.user.role === 'admin') return next();
+  const n = Date.now(), k = String(req.user.id);
+  upTries[k] = (upTries[k] || []).filter(t => n - t < 60 * 60 * 1000);
+  if (upTries[k].length >= 20) return res.status(429).json({ error: 'Too many photo uploads. Please try again in a while.' });
+  upTries[k].push(n);
+  next();
+};
+
+app.post('/api/upload', authed, uploadLimit,
   express.raw({ type: ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif'], limit: '4mb' }),
   async (req, res) => {
     const ext = Buffer.isBuffer(req.body) && sniff(req.body);
@@ -286,12 +307,16 @@ const clean = b => ({
   n: String(b.n || '').trim(), e: b.e || '📦', c: String(b.c || '').trim(),
   o: String(b.o || '').trim(), p: Number(b.p), m: Number(b.m || b.p),
   img: String(b.img || '').trim(),
+  // extra gallery photos (up to 5), shown on the product page after the main image
+  imgs: (Array.isArray(b.imgs) ? b.imgs : []).map(u => String(u || '').trim()).filter(Boolean).slice(0, 5),
   sub: String(b.sub || '').trim(),
   // manual shipping charge per item (₹). null = use the store default from Settings
   ship: (b.ship === undefined || b.ship === null || b.ship === '') ? null : Math.max(0, Math.round((Number(b.ship) || 0) * 100) / 100),
   desc: String(b.desc || '').trim().slice(0, 2000)
 });
 const valid = p => p.n && p.c && p.o && p.p > 0;
+// every image a product uses (main + gallery)
+const urlsOf = p => [p && p.img, ...((p && Array.isArray(p.imgs)) ? p.imgs : [])].filter(Boolean);
 
 app.post('/api/products', admin, async (req, res) => {
   const list = read('products'), p = clean(req.body);
@@ -307,7 +332,9 @@ app.put('/api/products/:id', admin, async (req, res) => {
   if (i < 0) return res.status(404).json({ error: 'Product not found' });
   const p = { ...list[i], ...clean({ ...list[i], ...req.body }), id: list[i].id };
   if (!valid(p)) return res.status(400).json({ error: 'Invalid product data' });
-  if (list[i].img && list[i].img !== p.img) dropFile(list[i].img);
+  // delete images that were removed from this product (main or gallery)
+  const keep = new Set(urlsOf(p));
+  urlsOf(list[i]).filter(u => !keep.has(u)).forEach(dropFile);
   list[i] = p;
   await write('products', list);
   res.json(p);
@@ -316,8 +343,75 @@ app.put('/api/products/:id', admin, async (req, res) => {
 app.delete('/api/products/:id', admin, async (req, res) => {
   const list = read('products'), next = list.filter(x => x.id != req.params.id);
   if (next.length === list.length) return res.status(404).json({ error: 'Product not found' });
-  dropFile((list.find(x => x.id == req.params.id) || {}).img);
+  urlsOf(list.find(x => x.id == req.params.id)).forEach(dropFile);
   await write('products', next);
+  // remove this product's reviews (and their photos) too
+  const rv = read('reviews'), left = rv.filter(r => r.productId != req.params.id);
+  if (left.length !== rv.length) {
+    rv.filter(r => r.productId == req.params.id).forEach(r => (r.images || []).forEach(dropFile));
+    await write('reviews', left);
+  }
+  res.json({ ok: true });
+});
+
+// ---------- Reviews & ratings ----------
+// only photos uploaded through /api/upload are allowed in a review (no outside links)
+const REVIEW_IMG = u => typeof u === 'string' && u.length < 300 &&
+  /^(\/api\/img\/[\w.-]+|\/uploads\/[\w.-]+|https:\/\/[\w.-]+\.blob\.vercel-storage\.com\/\S+)$/.test(u);
+const reviewOut = r => ({ id: r.id, name: r.name, rating: r.rating, text: r.text || '', images: r.images || [], verified: !!r.verified, createdAt: r.createdAt });
+// "Verified buyer" = this customer has a real (not cancelled / unpaid) order containing the product
+const hasBought = (uid, pid) => read('orders').some(o =>
+  o.userId === uid && o.status !== 'cancelled' && o.status !== 'payment_pending' && (o.items || []).some(i => i.id == pid));
+
+// everyone can read the reviews of a product
+app.get('/api/products/:id/reviews', (req, res) =>
+  res.json(read('reviews')
+    .filter(r => r.productId == req.params.id)
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .map(reviewOut)));
+
+// logged-in customers can post a review (posting again for the same product updates their review)
+app.post('/api/products/:id/reviews', authed, async (req, res) => {
+  const p = read('products').find(x => x.id == req.params.id);
+  if (!p) return res.status(404).json({ error: 'Product not found' });
+  const b = req.body || {}, rating = Math.round(Number(b.rating));
+  if (!(rating >= 1 && rating <= 5)) return res.status(400).json({ error: 'Please choose a star rating (1 to 5)' });
+  const text = String(b.text || '').trim().slice(0, 1000);
+  const images = (Array.isArray(b.images) ? b.images : []).filter(REVIEW_IMG).slice(0, 4);
+  if (!text && !images.length) return res.status(400).json({ error: 'Please write a few words or add a photo' });
+  const u = users().find(x => x.id === req.user.id);
+  if (!u) return res.status(401).json({ error: 'Account not found. Please log in again.' });
+
+  const list = read('reviews');
+  let r = list.find(x => x.productId == p.id && x.userId === u.id);
+  if (r) {
+    (r.images || []).filter(x => !images.includes(x)).forEach(dropFile);
+    Object.assign(r, { rating, text, images, verified: hasBought(u.id, p.id), name: u.name, updatedAt: new Date().toISOString() });
+  } else {
+    r = {
+      id: list.reduce((m, x) => Math.max(m, x.id), 0) + 1,
+      productId: p.id, userId: u.id, name: u.name, rating, text, images,
+      verified: hasBought(u.id, p.id), createdAt: new Date().toISOString()
+    };
+    list.push(r);
+  }
+  await write('reviews', list);
+  res.status(201).json(reviewOut(r));
+});
+
+// admin: see all reviews / remove a review
+app.get('/api/reviews', admin, (req, res) => {
+  const prods = read('products');
+  res.json(read('reviews').slice().reverse().map(r => ({
+    ...reviewOut(r), productId: r.productId,
+    productName: (prods.find(p => p.id == r.productId) || {}).n || '(deleted product)'
+  })));
+});
+app.delete('/api/reviews/:id', admin, async (req, res) => {
+  const list = read('reviews'), r = list.find(x => x.id == req.params.id);
+  if (!r) return res.status(404).json({ error: 'Review not found' });
+  (r.images || []).forEach(dropFile);
+  await write('reviews', list.filter(x => x !== r));
   res.json({ ok: true });
 });
 
@@ -477,6 +571,7 @@ app.use((err, req, res, next) =>
     if (Array.isArray(p) && p.length) cache.products = p;
     if (Array.isArray(o) && o.length) cache.orders = o;
     if (s && typeof s === 'object' && Object.keys(s).length) cache.settings = s;
+    await loadReviews();
 
     await ensureAdmin();
   } catch (e) {

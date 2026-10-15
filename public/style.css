@@ -417,3 +417,34 @@ body{overflow-x:clip}
   .rc{margin:6px 3vw 36px}
   .rc-card{width:140px}
 }
+/* ======== Product photo gallery + full picture viewer (paste at the END of style.css) ======== */
+
+.pd-gal{min-width:0}
+.pd-pic img{cursor:zoom-in}
+.pd-hint{position:absolute;right:12px;bottom:12px;pointer-events:none;background:var(--ink);color:#fff;font-size:12px;font-weight:700;padding:4px 12px;border-radius:99px;border:2px solid #fff}
+
+/* arrows on the main photo */
+.pd-pic .pg-p,.pd-pic .pg-n{position:absolute;top:50%;transform:translateY(-50%);z-index:2;width:42px;height:42px;display:grid;place-items:center;padding:0 0 3px;font-size:26px;line-height:1;font-weight:700;color:var(--ink);background:var(--yellow);border:3px solid var(--ink);border-radius:50%;box-shadow:3px 3px 0 var(--ink);cursor:pointer}
+.pd-pic .pg-p{left:12px}
+.pd-pic .pg-n{right:12px}
+.pd-pic .pg-p:active,.pd-pic .pg-n:active{transform:translateY(-50%) translate(2px,2px);box-shadow:none}
+
+/* thumbnails */
+.pd-thumbs{display:flex;gap:12px;margin-top:18px;overflow-x:auto;padding:4px 6px 10px}
+.pd-thumbs button{flex:none;width:74px;height:74px;padding:0;overflow:hidden;background:#fff;border:3px solid var(--ink);border-radius:12px;box-shadow:3px 3px 0 var(--ink);cursor:pointer;opacity:.75;transition:transform .1s,opacity .1s}
+.pd-thumbs button:hover{opacity:1;transform:translate(-2px,-2px)}
+.pd-thumbs button.on{opacity:1;background:var(--yellow);outline:3px solid var(--red);outline-offset:2px}
+.pd-thumbs img{width:100%;height:100%;object-fit:cover;display:block}
+
+/* full-screen viewer (product photos + review photos) */
+.rv-lb{touch-action:pan-y}
+.rv-lb .lb-p,.rv-lb .lb-n{top:50%;transform:translateY(-50%);width:48px;height:48px;padding:0 0 4px;font-size:30px;line-height:1;display:grid;place-items:center}
+.rv-lb .lb-p{left:14px;right:auto}
+.rv-lb .lb-n{right:14px}
+.rv-lb .lb-c{position:absolute;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:#fff;font-weight:700;font-size:13px;padding:4px 14px;border-radius:99px;border:2px solid #fff}
+
+@media(max-width:800px){
+  .pd-pic .pg-p,.pd-pic .pg-n{width:36px;height:36px;font-size:22px}
+  .pd-thumbs button{width:62px;height:62px}
+  .rv-lb .lb-p{left:6px}.rv-lb .lb-n{right:6px}
+}

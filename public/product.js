@@ -19,6 +19,7 @@
     document.title = p.n + ' – ' + (st.storeName || 'Kimizo');
     const off = p.m > p.p ? Math.round((1 - p.p / p.m) * 100) : 0;
     const flag = F[String(p.o).toLowerCase()] || '🌏';
+    const gal = [p.img, ...(Array.isArray(p.imgs) ? p.imgs : [])].filter(Boolean).filter((u, i, a) => a.indexOf(u) === i);
     const desc = p.desc || `${p.n} from ${p.o}, part of our ${p.sub || p.c} range. Carefully selected for quality and value, and delivered across India.`;
     const free = st.freeAbove > 0 ? ` (free above ${inr(st.freeAbove)})` : '';
     const shipTxt = (p.ship !== undefined && p.ship !== null && p.ship !== '')
@@ -27,7 +28,10 @@
     crumbs.innerHTML = `<a href="/">Home</a><span>›</span><span>${esc(p.c)}</span>${p.sub ? `<span>›</span><span>${esc(p.sub)}</span>` : ''}<span>›</span><span>${esc(p.n)}</span>`;
     box.innerHTML = `
     <div class="pd" style="--c:${COLORS[p.id % 5]}">
-      <div class="pd-pic"><i>${flag} ${esc(p.o)}</i>${pic(p)}</div>
+      <div class="pd-gal">
+        <div class="pd-pic" id="pdpic"><i>${flag} ${esc(p.o)}</i>${gal.length ? `<img id="pdmain" src="${esc(gal[0])}" alt="${esc(p.n)}">` : pic(p)}${gal.length > 1 ? '<button type="button" class="pg-p" aria-label="Previous photo">‹</button><button type="button" class="pg-n" aria-label="Next photo">›</button>' : ''}${gal.length ? '<span class="pd-hint">🔍 Tap to zoom</span>' : ''}</div>
+        ${gal.length > 1 ? `<div class="pd-thumbs">${gal.map((u, i) => `<button type="button" data-th="${i}" class="${i ? '' : 'on'}" aria-label="Photo ${i + 1}"><img src="${esc(u)}" alt=""></button>`).join('')}</div>` : ''}
+      </div>
       <div class="pd-box">
         <h1>${esc(p.n)}</h1>
         <div class="tags"><span>${esc(p.c)}</span>${p.sub ? `<span>${esc(p.sub)}</span>` : ''}<span>${flag} ${esc(p.o)}</span></div>
@@ -61,6 +65,27 @@
     $('pdp').onclick = () => { qty = Math.min(20, qty + 1); q(); };
     $('pda').onclick = () => { cart[p.id] = (cart[p.id] || 0) + qty; drawCart(); toast(qty > 1 ? qty + ' items added to cart' : 'Added to cart'); };
     $('pdbuy').onclick = () => { cart[p.id] = (cart[p.id] || 0) + qty; drawCart(); $('co').click(); };
+
+    // photo gallery: thumbnails, arrows, swipe, tap to open full picture
+    let gi = 0;
+    const setG = n => {
+      gi = (n + gal.length) % gal.length;
+      $('pdmain').src = gal[gi];
+      document.querySelectorAll('.pd-thumbs button').forEach((b, j) => b.classList.toggle('on', j === gi));
+    };
+    if (gal.length) {
+      const pc = $('pdpic'); let sx = 0, moved = false;
+      pc.onclick = e => {
+        if (moved) { moved = false; return; }
+        if (e.target.closest('.pg-p')) return setG(gi - 1);
+        if (e.target.closest('.pg-n')) return setG(gi + 1);
+        zoom(gal, gi);
+      };
+      pc.ontouchstart = e => { sx = e.touches[0].clientX; moved = false; };
+      pc.ontouchend = e => { const dx = e.changedTouches[0].clientX - sx; if (gal.length > 1 && Math.abs(dx) > 50) { moved = true; setG(gi + (dx < 0 ? 1 : -1)); } };
+      const th = document.querySelector('.pd-thumbs');
+      if (th) th.onclick = e => { const b = e.target.closest('button[data-th]'); if (b) setG(+b.dataset.th); };
+    }
   }
 
   function related(p) {
@@ -108,12 +133,26 @@
     return blob;
   }
 
-  function zoom(u) {
-    const o = document.createElement('div'); o.className = 'rv-lb';
-    o.innerHTML = `<img src="${esc(u)}" alt="Customer photo"><button type="button" aria-label="Close">✕</button>`;
-    const k = e => { if (e.key === 'Escape') close(); };
+  // full-screen photo viewer (works for one photo or many: arrows, swipe, keyboard)
+  function zoom(urls, i) {
+    urls = (Array.isArray(urls) ? urls : [urls]).filter(Boolean); if (!urls.length) return;
+    i = i || 0;
+    const many = urls.length > 1, o = document.createElement('div'); o.className = 'rv-lb';
+    o.innerHTML = `<img alt="Photo"><button type="button" class="lb-x" aria-label="Close">✕</button>${many ? '<button type="button" class="lb-p" aria-label="Previous">‹</button><button type="button" class="lb-n" aria-label="Next">›</button><span class="lb-c"></span>' : ''}`;
+    const im = o.querySelector('img'), c = o.querySelector('.lb-c');
+    const show = n => { i = (n + urls.length) % urls.length; im.src = urls[i]; if (c) c.textContent = (i + 1) + ' / ' + urls.length; };
+    const k = e => { if (e.key === 'Escape') close(); else if (many && e.key === 'ArrowLeft') show(i - 1); else if (many && e.key === 'ArrowRight') show(i + 1); };
     const close = () => { o.remove(); document.removeEventListener('keydown', k); };
-    o.onclick = close; document.addEventListener('keydown', k); document.body.appendChild(o);
+    let sx = 0;
+    o.ontouchstart = e => { sx = e.touches[0].clientX; };
+    o.ontouchend = e => { const dx = e.changedTouches[0].clientX - sx; if (many && Math.abs(dx) > 50) show(i + (dx < 0 ? 1 : -1)); };
+    o.onclick = e => {
+      if (e.target.closest('.lb-p')) return show(i - 1);
+      if (e.target.closest('.lb-n')) return show(i + 1);
+      if (e.target.tagName === 'IMG') return;
+      close();
+    };
+    show(i); document.addEventListener('keydown', k); document.body.appendChild(o);
   }
 
   function reviews(p) {
@@ -230,7 +269,7 @@
       const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.st) { rating = +b.dataset.st; drawPick(); }
       else if (b.dataset.rm !== undefined) { imgs.splice(+b.dataset.rm, 1); drawThumbs(); }
-      else if (b.dataset.zoom) zoom(b.dataset.zoom);
+      else if (b.dataset.zoom) { const all = [...b.parentElement.querySelectorAll('[data-zoom]')]; zoom(all.map(x => x.dataset.zoom), all.indexOf(b)); }
       else if (b.dataset.more !== undefined) { shown += 5; drawList(); }
       else if (b.id === 'rvsend') send();
     });
