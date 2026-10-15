@@ -224,7 +224,7 @@
 
     async function load() {
       try {
-        const r = await fetch(api); if (!r.ok) throw new Error('x');
+        const r = await fetch(api, { cache: 'no-store' }); if (!r.ok) throw new Error('x');
         const d = await r.json(); list = Array.isArray(d) ? d : (d.reviews || []); failed = false;
       } catch { list = []; failed = true; }
       list.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));

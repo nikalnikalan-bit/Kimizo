@@ -448,3 +448,35 @@ body{overflow-x:clip}
   .pd-thumbs button{width:62px;height:62px}
   .rv-lb .lb-p{left:6px}.rv-lb .lb-n{right:6px}
 }
+/* ======== Home page reviews + star rating on product cards (paste at the END of style.css) ======== */
+
+/* rating line on product cards */
+.cr{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;line-height:1.2}
+.cr .stars{font-size:13px;letter-spacing:0}
+.cr span:last-child{color:var(--mute)}
+
+/* "What customers say" */
+.hr{margin-top:0}
+.hr .rc-t{background:var(--pink)}
+.hr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:20px;padding:4px 6px 10px}
+.hr-card{display:flex;flex-direction:column;gap:8px;min-width:0;background:#fff;border:3px solid var(--ink);border-radius:14px;box-shadow:5px 5px 0 var(--ink);padding:16px;transition:transform .12s,box-shadow .12s}
+.hr-card:nth-child(4n+1){background:#fffdf3}
+.hr-card:hover{transform:translate(-2px,-2px);box-shadow:8px 8px 0 var(--ink)}
+.hr-top{display:flex;align-items:center;gap:10px}
+.hr-top>div{display:flex;flex-wrap:wrap;align-items:center;gap:2px 8px;min-width:0}
+.hr-top small{color:var(--mute);flex-basis:100%}
+.hr-av{flex:none;width:42px;height:42px;display:grid;place-items:center;border:3px solid var(--ink);border-radius:50%;background:var(--yellow);font-family:var(--h);font-size:17px;box-shadow:2px 2px 0 var(--ink)}
+.hr-card:nth-child(3n+2) .hr-av{background:var(--teal)}
+.hr-card:nth-child(3n) .hr-av{background:var(--sky)}
+.hr-card p{margin:0;font-size:14px;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden}
+.hr-ph{display:flex;gap:8px}
+.hr-ph a{display:block;width:64px;height:64px;border:2px solid var(--ink);border-radius:8px;overflow:hidden}
+.hr-ph img{width:100%;height:100%;object-fit:cover;display:block}
+.hr-prod{display:flex;align-items:center;gap:10px;margin-top:auto;padding-top:10px;border-top:2px dashed var(--ink);color:var(--ink);font-size:13px;font-weight:700;text-decoration:none}
+.hr-prod:hover span:last-child{text-decoration:underline}
+.hr-pi{flex:none;width:34px;height:34px;display:grid;place-items:center;border:2px solid var(--ink);border-radius:8px;background:var(--cream);overflow:hidden;font-size:18px}
+.hr-pi img{width:100%;height:100%;object-fit:cover}
+
+@media(max-width:700px){
+  .hr-grid{grid-template-columns:1fr;gap:16px}
+}

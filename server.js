@@ -44,6 +44,16 @@ const loadReviews = async () => {
   } catch (e) { console.warn('Reviews load warning:', e.message); }
 };
 
+// On Vercel every serverless instance keeps its own memory copy. So reviews are re-read from Drive before they are shown
+// (at most every 8 seconds) and always before they are changed. This way a review posted on one instance shows up everywhere.
+let rvStamp = 0;
+const freshReviews = async force => {
+  if (!process.env.GOOGLE_DRIVE_FOLDER_ID) return;
+  if (!force && Date.now() - rvStamp < 8000) return;
+  rvStamp = Date.now();
+  await loadReviews();
+};
+
 app.use(express.json({ verify: (req, res, buf) => { req.rawBody = buf; } })); // rawBody is needed for the Razorpay webhook signature
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -364,11 +374,30 @@ const hasBought = (uid, pid) => read('orders').some(o =>
   o.userId === uid && o.status !== 'cancelled' && o.status !== 'payment_pending' && (o.items || []).some(i => i.id == pid));
 
 // everyone can read the reviews of a product
-app.get('/api/products/:id/reviews', (req, res) =>
+app.get('/api/products/:id/reviews', async (req, res) => {
+  await freshReviews();
+  res.set('Cache-Control', 'no-store');
   res.json(read('reviews')
     .filter(r => r.productId == req.params.id)
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-    .map(reviewOut)));
+    .map(reviewOut));
+});
+
+// home page: latest reviews of all products + average rating of every product
+app.get('/api/reviews/recent', async (req, res) => {
+  await freshReviews();
+  res.set('Cache-Control', 'no-store');
+  const lim = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 30));
+  const prods = read('products'), all = read('reviews'), ratings = {};
+  all.forEach(r => { const a = ratings[r.productId] || (ratings[r.productId] = { sum: 0, count: 0 }); a.sum += r.rating; a.count++; });
+  Object.keys(ratings).forEach(k => { ratings[k] = { avg: Math.round((ratings[k].sum / ratings[k].count) * 10) / 10, count: ratings[k].count }; });
+  const reviews = all.slice()
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .filter(r => prods.some(p => p.id == r.productId))
+    .slice(0, lim)
+    .map(r => { const p = prods.find(x => x.id == r.productId); return { ...reviewOut(r), productId: r.productId, productName: p.n, productImg: p.img || '', productEmoji: p.e || '📦' }; });
+  res.json({ ratings, reviews, total: all.length });
+});
 
 // logged-in customers can post a review (posting again for the same product updates their review)
 app.post('/api/products/:id/reviews', authed, async (req, res) => {
@@ -382,6 +411,7 @@ app.post('/api/products/:id/reviews', authed, async (req, res) => {
   const u = users().find(x => x.id === req.user.id);
   if (!u) return res.status(401).json({ error: 'Account not found. Please log in again.' });
 
+  await freshReviews(true);
   const list = read('reviews');
   let r = list.find(x => x.productId == p.id && x.userId === u.id);
   if (r) {
@@ -400,7 +430,8 @@ app.post('/api/products/:id/reviews', authed, async (req, res) => {
 });
 
 // admin: see all reviews / remove a review
-app.get('/api/reviews', admin, (req, res) => {
+app.get('/api/reviews', admin, async (req, res) => {
+  await freshReviews(true);
   const prods = read('products');
   res.json(read('reviews').slice().reverse().map(r => ({
     ...reviewOut(r), productId: r.productId,
@@ -408,6 +439,7 @@ app.get('/api/reviews', admin, (req, res) => {
   })));
 });
 app.delete('/api/reviews/:id', admin, async (req, res) => {
+  await freshReviews(true);
   const list = read('reviews'), r = list.find(x => x.id == req.params.id);
   if (!r) return res.status(404).json({ error: 'Review not found' });
   (r.images || []).forEach(dropFile);
