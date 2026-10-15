@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>My profile – Kimizo</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <a href="/" class="logo" style="text-decoration:none">kimizo</a>
+  <div class="search">
+    <input id="q" placeholder="Search for unique finds..." aria-label="Search products" autocomplete="off" enterkeyhint="search">
+    <button type="button" id="sb">Search</button>
+    <div class="sg" id="sg" role="listbox" aria-label="Search suggestions" hidden></div>
+  </div>
+  <div id="auth"></div>
+  <button class="cartbtn" id="cb" aria-label="Open cart">🛒<b id="cc">0</b></button>
+</header>
+
+<main class="pf" id="pf"><p class="pd-msg">Loading your profile...</p></main>
+
+<footer><span class="logo" style="color:#fff">kimizo</span><br>Global finds. Closer to you.</footer>
+
+<div class="veil" id="veil"></div>
+<aside class="drawer" id="dr" aria-label="Cart">
+  <header><b>Your cart</b><button class="cartbtn" id="cx" aria-label="Close cart">✕</button></header>
+  <div class="items" id="items"></div>
+  <div class="foot"><small id="ship" style="display:block;color:var(--mute);margin-bottom:6px"></small><div class="t"><span>Total</span><span id="tot">₹0</span></div><button id="co">Checkout</button></div>
+</aside>
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
+<script src="profile.js"></script>
+</body>
+</html>

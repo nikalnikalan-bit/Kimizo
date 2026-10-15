@@ -225,5 +225,14 @@ function applySettings(){
 fetch("/api/settings").then(r=>r.json()).then(s=>{S=s;applySettings();drawCart()}).catch(()=>{});
 
 const U=JSON.parse(localStorage.getItem("kz_user")||"null");
-$("auth").innerHTML=U?'<a href="/orders.html">My orders</a>'+(U.role==="admin"?'<a href="/admin">Admin panel</a>':"")+`<span>Hi, ${esc(U.name.split(" ")[0])}</span><a href="#" id="lo">Logout</a>`:'<a href="/login.html">Login / Sign up</a>';
+/* ---------- Account menu (avatar + dropdown) ---------- */
+if(U){
+  const nm=String(U.name||"Customer").trim(),first=nm.split(/\s+/)[0];
+  $("auth").innerHTML=`<div class="um"><button type="button" class="um-b" aria-haspopup="menu" aria-expanded="false"><span class="um-av">${esc((nm[0]||"C").toUpperCase())}</span><span class="um-n">${esc(first)}</span><i class="um-c" aria-hidden="true"></i></button><div class="um-m" role="menu" hidden><div class="um-h"><span class="um-av big">${esc((nm[0]||"C").toUpperCase())}</span><div><b>${esc(nm)}</b><small>${esc(U.email||"")}</small></div></div><a role="menuitem" href="/profile.html">👤 My profile</a><a role="menuitem" href="/orders.html">📦 My orders</a><a role="menuitem" href="/profile.html#reviews">⭐ My reviews</a>${U.role==="admin"?'<a role="menuitem" href="/admin">🛠 Admin panel</a>':""}<a role="menuitem" href="#" id="lo" class="um-out">🚪 Logout</a></div></div>`;
+  const ub=$("auth").querySelector(".um-b"),um=$("auth").querySelector(".um-m");
+  const uclose=()=>{um.hidden=true;ub.setAttribute("aria-expanded","false")};
+  ub.onclick=e=>{e.stopPropagation();const o=um.hidden;um.hidden=!o;ub.setAttribute("aria-expanded",o)};
+  document.addEventListener("click",e=>{if(!e.target.closest(".um"))uclose()});
+  document.addEventListener("keydown",e=>{if(e.key==="Escape")uclose()});
+}else $("auth").innerHTML='<a href="/login.html">Login / Sign up</a>';
 if($("lo"))$("lo").onclick=e=>{e.preventDefault();localStorage.removeItem("kz_token");localStorage.removeItem("kz_user");location.reload()};

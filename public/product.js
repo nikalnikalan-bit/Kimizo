@@ -187,7 +187,7 @@
         const d = r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
         const photos = Array.isArray(r.images) ? r.images.filter(Boolean) : [];
         return `<article class="rv-item"><div class="rv-av" aria-hidden="true">${esc(String(r.name || 'C').trim()[0] || 'C').toUpperCase()}</div>
-          <div class="rv-body"><div class="rv-meta"><b>${esc(shortName(r.name))}</b>${r.verified ? '<span class="rv-ver">✔ Verified buyer</span>' : ''}<small>${esc(d)}</small></div>
+          <div class="rv-body"><div class="rv-meta"><b>${esc(shortName(r.name))}</b>${r.verified ? '<span class="rv-ver">✔ Verified buyer</span>' : ''}<small>${r.count > 1 ? esc(r.count + ' reviews · ') : ''}${esc(d)}</small></div>
           ${stars(r.rating)}
           ${r.text ? `<p>${esc(r.text)}</p>` : ''}
           ${photos.length ? `<div class="rv-imgs">${photos.map(u => `<button type="button" data-zoom="${esc(u)}" aria-label="View photo"><img src="${esc(u)}" alt="Customer photo" loading="lazy"></button>`).join('')}</div>` : ''}

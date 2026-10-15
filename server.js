@@ -45,11 +45,11 @@ const loadReviews = async () => {
 };
 
 // On Vercel every serverless instance keeps its own memory copy. So reviews are re-read from Drive before they are shown
-// (at most every 8 seconds) and always before they are changed. This way a review posted on one instance shows up everywhere.
+// (at most every 3 seconds) and always before they are changed. This way a review posted on one instance shows up everywhere.
 let rvStamp = 0;
 const freshReviews = async force => {
   if (!process.env.GOOGLE_DRIVE_FOLDER_ID) return;
-  if (!force && Date.now() - rvStamp < 8000) return;
+  if (!force && Date.now() - rvStamp < 3000) return;
   rvStamp = Date.now();
   await loadReviews();
 };
@@ -84,7 +84,7 @@ const normPhone = p => {
   return /^[6-9]\d{9}$/.test(d) ? d : null;
 };
 const users = () => read('users');
-const publicUser = u => ({ id: u.id, name: u.name, email: u.email, phone: u.phone || '', role: u.role });
+const publicUser = u => ({ id: u.id, name: u.name, email: u.email, phone: u.phone || '', role: u.role, createdAt: u.createdAt || null });
 
 // Admin account creation helper
 const ensureAdmin = async () => {
@@ -160,6 +160,24 @@ app.post('/api/auth/login', (req, res) => {
 app.get('/api/auth/me', authed, (req, res) => {
   const u = users().find(x => x.id === req.user.id);
   u ? res.json(publicUser(u)) : res.status(401).json({ error: 'Account not found' });
+});
+// customer can update own name / mobile number (email stays fixed)
+app.put('/api/auth/me', authed, async (req, res) => {
+  const list = users(), u = list.find(x => x.id === req.user.id);
+  if (!u) return res.status(401).json({ error: 'Account not found' });
+  const b = req.body || {}, name = String(b.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'Name is required' });
+  if (name.length > 60) return res.status(400).json({ error: 'Name is too long' });
+  let phone = u.phone || '';
+  if (b.phone !== undefined && String(b.phone).trim() !== '') {
+    const n = normPhone(b.phone);
+    if (!n) return res.status(400).json({ error: 'Enter a valid 10-digit mobile number' });
+    if (list.some(x => x.id !== u.id && x.phone === n)) return res.status(409).json({ error: 'This mobile number is already used by another account' });
+    phone = n;
+  }
+  u.name = name; u.phone = phone;
+  await write('users', list);
+  res.json(publicUser(u));
 });
 app.get('/login', (req, res) => res.sendFile(path.join(__dirname, 'public', 'login.html')));
 
@@ -359,7 +377,7 @@ app.delete('/api/products/:id', admin, async (req, res) => {
   const rv = read('reviews'), left = rv.filter(r => r.productId != req.params.id);
   if (left.length !== rv.length) {
     rv.filter(r => r.productId == req.params.id).forEach(r => (r.images || []).forEach(dropFile));
-    await write('reviews', left);
+    await saveReviews(left).catch(e => console.error(e.message));
   }
   res.json({ ok: true });
 });
@@ -368,10 +386,30 @@ app.delete('/api/products/:id', admin, async (req, res) => {
 // only photos uploaded through /api/upload are allowed in a review (no outside links)
 const REVIEW_IMG = u => typeof u === 'string' && u.length < 300 &&
   /^(\/api\/img\/[\w.-]+|\/uploads\/[\w.-]+|https:\/\/[\w.-]+\.blob\.vercel-storage\.com\/\S+)$/.test(u);
-const reviewOut = r => ({ id: r.id, name: r.name, rating: r.rating, text: r.text || '', images: r.images || [], verified: !!r.verified, createdAt: r.createdAt });
+const reviewOut = r => ({
+  id: r.id, name: r.name, rating: r.rating, text: r.text || '', images: r.images || [], verified: !!r.verified, createdAt: r.createdAt,
+  count: read('reviews').filter(x => x.userId === r.userId).length   // how many reviews this customer has written
+});
 // "Verified buyer" = this customer has a real (not cancelled / unpaid) order containing the product
 const hasBought = (uid, pid) => read('orders').some(o =>
   o.userId === uid && o.status !== 'cancelled' && o.status !== 'payment_pending' && (o.items || []).some(i => i.id == pid));
+
+// Saves reviews to Google Drive FIRST (so every serverless instance sees the same data).
+// Memory + local file are updated only after that worked, and a failure is reported instead of being hidden.
+const saveReviews = async list => {
+  if (process.env.GOOGLE_DRIVE_FOLDER_ID) {
+    try { await writeToDrive('reviews', list); }
+    catch (e1) {
+      try { await updateDriveFile('reviews', list); }
+      catch (e2) {
+        console.error('Reviews save to Drive failed:', e1.message, '|', e2.message);
+        throw new Error('Could not save to Google Drive. Create a file named reviews.json (content: []) in your Drive folder once, then try again.');
+      }
+    }
+  }
+  cache.reviews = list;
+  try { fs.writeFileSync(file('reviews'), JSON.stringify(list, null, 2)); } catch (_) {}
+};
 
 // everyone can read the reviews of a product
 app.get('/api/products/:id/reviews', async (req, res) => {
@@ -412,10 +450,10 @@ app.post('/api/products/:id/reviews', authed, async (req, res) => {
   if (!u) return res.status(401).json({ error: 'Account not found. Please log in again.' });
 
   await freshReviews(true);
-  const list = read('reviews');
-  let r = list.find(x => x.productId == p.id && x.userId === u.id);
+  const list = read('reviews').map(x => ({ ...x }));   // work on a copy; it replaces the real list only after saving worked
+  let r = list.find(x => x.productId == p.id && x.userId === u.id), removed = [];
   if (r) {
-    (r.images || []).filter(x => !images.includes(x)).forEach(dropFile);
+    removed = (r.images || []).filter(x => !images.includes(x));
     Object.assign(r, { rating, text, images, verified: hasBought(u.id, p.id), name: u.name, updatedAt: new Date().toISOString() });
   } else {
     r = {
@@ -425,8 +463,29 @@ app.post('/api/products/:id/reviews', authed, async (req, res) => {
     };
     list.push(r);
   }
-  await write('reviews', list);
+  try { await saveReviews(list); }
+  catch (e) { return res.status(500).json({ error: e.message }); }
+  removed.forEach(dropFile);
   res.status(201).json(reviewOut(r));
+});
+
+// customer: my own reviews (for the profile page) and delete one of mine
+app.get('/api/my-reviews', authed, async (req, res) => {
+  await freshReviews();
+  res.set('Cache-Control', 'no-store');
+  const prods = read('products');
+  res.json(read('reviews').filter(r => r.userId === req.user.id)
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .map(r => { const p = prods.find(x => x.id == r.productId) || {}; return { ...reviewOut(r), productId: r.productId, productName: p.n || '(removed product)', productImg: p.img || '', productEmoji: p.e || '📦' }; }));
+});
+app.delete('/api/my-reviews/:id', authed, async (req, res) => {
+  await freshReviews(true);
+  const all = read('reviews'), r = all.find(x => x.id == req.params.id && x.userId === req.user.id);
+  if (!r) return res.status(404).json({ error: 'Review not found' });
+  try { await saveReviews(all.filter(x => x !== r)); }
+  catch (e) { return res.status(500).json({ error: e.message }); }
+  (r.images || []).forEach(dropFile);
+  res.json({ ok: true });
 });
 
 // admin: see all reviews / remove a review
@@ -442,8 +501,9 @@ app.delete('/api/reviews/:id', admin, async (req, res) => {
   await freshReviews(true);
   const list = read('reviews'), r = list.find(x => x.id == req.params.id);
   if (!r) return res.status(404).json({ error: 'Review not found' });
+  try { await saveReviews(list.filter(x => x !== r)); }
+  catch (e) { return res.status(500).json({ error: e.message }); }
   (r.images || []).forEach(dropFile);
-  await write('reviews', list.filter(x => x !== r));
   res.json({ ok: true });
 });
 
