@@ -67,6 +67,27 @@ function drawCart(){
 function toast(m){const t=$("toast");t.textContent=m;t.classList.add("show");clearTimeout(toast.x);toast.x=setTimeout(()=>t.classList.remove("show"),1600)}
 function open(v){$("dr").classList.toggle("open",v);$("veil").classList.toggle("open",v)}
 
+/* ---------- Recently viewed (saved in this browser) ---------- */
+const RK="kz_recent";
+const recentIds=()=>{try{return JSON.parse(localStorage.getItem(RK)||"[]")}catch{return[]}};
+function pushRecent(id){try{const a=recentIds().filter(x=>String(x)!==String(id));a.unshift(+id);localStorage.setItem(RK,JSON.stringify(a.slice(0,12)))}catch{}}
+async function drawRecent(el,exclude){
+  if(!el)return;
+  const ids=recentIds().filter(x=>String(x)!==String(exclude));
+  if(!ids.length){el.innerHTML="";return}
+  let list=P;
+  if(!list.length){try{list=await fetch("/api/products").then(r=>r.json())}catch{return}}
+  const l=ids.map(id=>list.find(p=>p.id==id)).filter(Boolean).slice(0,8);
+  if(!l.length){el.innerHTML="";return}
+  el.innerHTML=`<div class="rc-head"><h2 class="rc-t">Recently viewed</h2><button type="button" class="rc-clear" data-rclear>Clear</button></div><div class="rc-row">${l.map(p=>`<a class="rc-card" href="/product.html?id=${p.id}"><span class="rc-pic">${p.img?`<img src="${esc(p.img)}" alt="" loading="lazy">`:esc(p.e)}</span><b>${esc(p.n)}</b><span class="rc-p">${inr(p.p)}${p.m>p.p?`<s>${inr(p.m)}</s>`:""}</span></a>`).join("")}</div>`;
+}
+function homeRecent(){
+  if(!$("pager"))return;
+  let s=$("recent");
+  if(!s){s=document.createElement("section");s.id="recent";s.className="rc";$("pager").after(s)}
+  drawRecent(s);
+}
+
 /* ---------- Search: suggestions while typing, filter only on Search click / Enter ---------- */
 let sgI=-1;
 function hideSg(){const sg=$("sg");if(sg){sg.hidden=true;sg.innerHTML="";sgI=-1}}
@@ -113,6 +134,7 @@ document.addEventListener("click",e=>{
   const cd=e.target.closest(".card[data-href]");
   if(cd&&!e.target.closest("button,a")&&!e.metaKey&&!e.ctrlKey){location.href=cd.dataset.href;return}
   const b=e.target.closest("button");if(!b)return;
+  if(b.dataset.rclear!==undefined){try{localStorage.removeItem(RK)}catch{}const r=$("recent");if(r)r.innerHTML="";return}
   if(b.dataset.c){cat=b.dataset.c;sub="All";page=1;render()}
   if(b.dataset.s){sub=b.dataset.s;page=1;render()}
   if(b.dataset.o){org=b.dataset.o;page=1;render()}
@@ -163,7 +185,7 @@ $("co").onclick=()=>{
   location.href="/checkout.html";
 };
 const qp=new URLSearchParams(location.search).get("q");if(qp&&$("grid")){$("q").value=qp;sq=qp}
-fetch("/api/products").then(r=>r.json()).then(d=>{P=d;render();drawCart()}).catch(()=>{$("grid").innerHTML='<div class="empty">Could not load products. Is the server running?</div>'});
+fetch("/api/products").then(r=>r.json()).then(d=>{P=d;render();drawCart();homeRecent()}).catch(()=>{$("grid").innerHTML='<div class="empty">Could not load products. Is the server running?</div>'});
 
 function applySettings(){
   document.title=S.storeName+" – "+S.tagline;
