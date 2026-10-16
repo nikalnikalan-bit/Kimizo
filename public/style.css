@@ -562,3 +562,37 @@ body{overflow-x:clip}
 .logo-img img{height:36px;width:auto;display:block;filter:drop-shadow(2px 2px 0 var(--ink));transition:transform .12s}
 .logo-img:hover img{transform:rotate(-2deg) scale(1.04)}
 @media(max-width:700px){.logo-img img{height:30px}}
+/* ======== NEW badge, Coming soon (cross), stock (paste at the END of style.css) ======== */
+
+/* badges on the product picture */
+.bdg{position:absolute;z-index:3;font-style:normal;font-size:11px;font-weight:700;letter-spacing:.5px;padding:2px 9px;border:2px solid var(--ink);border-radius:5px;box-shadow:2px 2px 0 var(--ink)}
+.bdg.new{top:8px;right:8px;background:var(--yellow);color:var(--ink);transform:rotate(5deg)}
+.pd-pic .bdg.new{top:14px;right:14px;font-size:14px;padding:3px 12px}
+.bdg.soon-t{left:50%;top:50%;transform:translate(-50%,-50%) rotate(-8deg);background:var(--ink);color:var(--yellow);font-size:14px;padding:5px 14px;white-space:nowrap;box-shadow:3px 3px 0 var(--red)}
+.bdg.soon-t.out{background:var(--red);color:#fff;box-shadow:3px 3px 0 var(--ink)}
+.pd-pic .bdg.soon-t{font-size:20px;padding:8px 22px}
+
+/* big cross over a "coming soon" product */
+.xo{position:absolute;inset:0;z-index:2;pointer-events:none;background:
+  linear-gradient(to top right,transparent calc(50% - 3px),var(--ink) calc(50% - 3px),var(--ink) calc(50% + 3px),transparent calc(50% + 3px)),
+  linear-gradient(to bottom right,transparent calc(50% - 3px),var(--ink) calc(50% - 3px),var(--ink) calc(50% + 3px),transparent calc(50% + 3px)),
+  rgba(255,255,255,.55)}
+.card.soon .pic img,.card.sold .pic img,.pd-pic:has(.xo) img{filter:grayscale(1);opacity:.75}
+.card.sold .pic img{opacity:.6}
+.card.soon .info h3 a,.card.soon .pr{color:var(--mute)}
+
+/* stock text */
+.stk{font-size:12px;font-weight:700;color:#14803c}
+.stk.low{color:#c25b00}
+.stk.out{color:var(--red-d)}
+.pd-box .stk{font-size:14px;margin:0 0 6px}
+
+/* disabled buttons */
+.add:disabled{background:#ddd;color:#777;cursor:not-allowed;box-shadow:none;border-color:#999}
+.add:disabled:hover{background:#ddd}
+.add:disabled:active{transform:none}
+
+/* product page */
+.tags .tg-new{background:var(--yellow);box-shadow:2px 2px 0 var(--ink)}
+.tags .tg-soon{background:var(--ink);color:var(--yellow)}
+.pd-soon{margin-top:22px;padding:14px 16px;font-weight:700;background:var(--cream);border:3px dashed var(--ink);border-radius:12px}

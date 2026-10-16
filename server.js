@@ -54,6 +54,18 @@ const freshReviews = async force => {
   await loadReviews();
 };
 
+// Same idea for products and orders: stock must be the latest value from Drive before it is shown or changed
+const stamps = {};
+const refresh = async (names, force) => {
+  if (!process.env.GOOGLE_DRIVE_FOLDER_ID) return;
+  await Promise.all(names.map(async n => {
+    if (!force && Date.now() - (stamps[n] || 0) < 5000) return;
+    stamps[n] = Date.now();
+    try { const d = await readFromDrive(n); if (Array.isArray(d) && d.length) cache[n] = d; }
+    catch (e) { console.warn('Refresh warning (' + n + '):', e.message); }
+  }));
+};
+
 app.use(express.json({ verify: (req, res, buf) => { req.rawBody = buf; } })); // rawBody is needed for the Razorpay webhook signature
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -317,7 +329,8 @@ app.get('/api/env-check', (req, res) => res.json({
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
 
 // ---------- Products ----------
-app.get('/api/products', (req, res) => {
+app.get('/api/products', async (req, res) => {
+  await refresh(['products']);
   const { q, category, origin } = req.query;
   let list = read('products');
   if (category) list = list.filter(p => p.c === category);
@@ -326,7 +339,8 @@ app.get('/api/products', (req, res) => {
   res.json(list);
 });
 
-app.get('/api/products/:id', (req, res) => {
+app.get('/api/products/:id', async (req, res) => {
+  await refresh(['products']);
   const p = read('products').find(x => x.id == req.params.id);
   p ? res.json(p) : res.status(404).json({ error: 'Product not found' });
 });
@@ -340,6 +354,10 @@ const clean = b => ({
   sub: String(b.sub || '').trim(),
   // manual shipping charge per item (₹). null = use the store default from Settings
   ship: (b.ship === undefined || b.ship === null || b.ship === '') ? null : Math.max(0, Math.round((Number(b.ship) || 0) * 100) / 100),
+  // stock: null = not tracked (unlimited), otherwise how many are left
+  stock: (b.stock === undefined || b.stock === null || b.stock === '') ? null : Math.max(0, Math.floor(Number(b.stock) || 0)),
+  soon: b.soon === true || b.soon === 'true',     // "Coming soon": visible but cannot be bought
+  nw: b.nw === true || b.nw === 'true',           // always show the NEW badge (new products also get it automatically for 14 days)
   desc: String(b.desc || '').trim().slice(0, 2000)
 });
 const valid = p => p.n && p.c && p.o && p.p > 0;
@@ -347,15 +365,18 @@ const valid = p => p.n && p.c && p.o && p.p > 0;
 const urlsOf = p => [p && p.img, ...((p && Array.isArray(p.imgs)) ? p.imgs : [])].filter(Boolean);
 
 app.post('/api/products', admin, async (req, res) => {
+  await refresh(['products'], true);
   const list = read('products'), p = clean(req.body);
   if (!valid(p)) return res.status(400).json({ error: 'n, c, o and p (price) are required' });
   p.id = list.reduce((m, x) => Math.max(m, x.id), 0) + 1;
+  p.createdAt = new Date().toISOString();   // used for the automatic NEW badge
   list.push(p);
   await write('products', list);
   res.status(201).json(p);
 });
 
 app.put('/api/products/:id', admin, async (req, res) => {
+  await refresh(['products'], true);
   const list = read('products'), i = list.findIndex(x => x.id == req.params.id);
   if (i < 0) return res.status(404).json({ error: 'Product not found' });
   const p = { ...list[i], ...clean({ ...list[i], ...req.body }), id: list[i].id };
@@ -369,6 +390,7 @@ app.put('/api/products/:id', admin, async (req, res) => {
 });
 
 app.delete('/api/products/:id', admin, async (req, res) => {
+  await refresh(['products'], true);
   const list = read('products'), next = list.filter(x => x.id != req.params.id);
   if (next.length === list.length) return res.status(404).json({ error: 'Product not found' });
   urlsOf(list.find(x => x.id == req.params.id)).forEach(dropFile);
@@ -536,18 +558,33 @@ const markPaid = (o, paymentId) => {
 app.get('/api/payment/config', (req, res) => res.json({ razorpayKey: rzpOn ? RZP_KEY : null }));
 
 // ---------- Orders ----------
+// give the stock of an order back (cancelled order / online payment never completed). Works only once per order.
+const restoreStock = (o, products) => {
+  if (!o.stockTaken || o.stockRestored) return false;
+  (o.items || []).forEach(i => { const p = products.find(x => x.id == i.id); if (p && p.stock != null) p.stock += i.qty; });
+  o.stockRestored = true;
+  return true;
+};
+
 app.post('/api/orders', authed, async (req, res) => {
   const { name, phone, address, items } = req.body || {};
   if (!name || !phone || !address || !Array.isArray(items) || !items.length)
     return res.status(400).json({ error: 'name, phone, address and items are required' });
   const online = (req.body || {}).paymentMethod === 'online';
   if (online && !rzpOn) return res.status(400).json({ error: 'Online payment is not available right now' });
+  await refresh(['products', 'orders'], true);
   const products = read('products');
+  // free the stock of online orders that were started but never paid (older than 30 minutes)
+  read('orders').forEach(o => { if (o.status === 'payment_pending' && Date.now() - new Date(o.createdAt) > 30 * 60 * 1000) restoreStock(o, products); });
   let total = 0, manualShip = 0, hasDefault = false;
-  const lines = [];
+  const lines = [], want = {};
   for (const it of items) {
     const p = products.find(x => x.id == it.id), qty = Math.floor(Number(it.qty));
     if (!p || !(qty > 0)) return res.status(400).json({ error: 'Invalid item in cart' });
+    if (p.soon) return res.status(400).json({ error: p.n + ' is coming soon and cannot be ordered yet. Please remove it from your cart.' });
+    want[p.id] = (want[p.id] || 0) + qty;
+    if (p.stock != null && want[p.id] > p.stock)
+      return res.status(400).json({ error: p.stock > 0 ? 'Only ' + p.stock + ' left for ' + p.n + '. Please reduce the quantity.' : p.n + ' is out of stock. Please remove it from your cart.' });
     total += p.p * qty;
     if (p.ship !== undefined && p.ship !== null && p.ship !== '') manualShip += Number(p.ship) * qty; else hasDefault = true;
     lines.push({ id: p.id, name: p.n, price: p.p, qty });
@@ -564,9 +601,14 @@ app.post('/api/orders', authed, async (req, res) => {
     payment: { method: online ? 'razorpay' : 'cod', status: 'pending' },
     history: online ? [] : [{ status: 'placed', at: new Date().toISOString(), note: 'Order received' }]
   };
+  // take the stock now so two customers cannot buy the last piece
+  products.forEach(p => { if (want[p.id] && p.stock != null) p.stock = Math.max(0, p.stock - want[p.id]); });
+  const giveBack = () => products.forEach(p => { if (want[p.id] && p.stock != null) p.stock += want[p.id]; });
+  order.stockTaken = true;
   orders.push(order);
   if (!online) {
     await write('orders', orders);
+    await write('products', products);
     return res.status(201).json(order);
   }
   try {
@@ -574,9 +616,11 @@ app.post('/api/orders', authed, async (req, res) => {
     const rz = await rzpCreateOrder(Math.round(order.total * 100), order.id, { orderId: String(order.id), userId: String(req.user.id) });
     order.payment.rzpOrderId = rz.id;
     await write('orders', orders);
+    await write('products', products);
     res.status(201).json({ ...order, razorpay: { key: RZP_KEY, orderId: rz.id, amount: rz.amount } });
   } catch (e) {
     orders.splice(orders.indexOf(order), 1);
+    giveBack();
     console.error('Razorpay order failed:', e.message);
     res.status(502).json({ error: 'Could not start online payment. Please try again or choose Cash on delivery.' });
   }
@@ -617,6 +661,7 @@ app.get('/api/my-orders', authed, (req, res) => res.json(read('orders').filter(o
 app.get('/api/orders', admin, (req, res) => res.json(read('orders').filter(o => o.status !== 'payment_pending').reverse()));
 
 app.patch('/api/orders/:id', admin, async (req, res) => {
+  await refresh(['products', 'orders'], true);
   const orders = read('orders'), o = orders.find(x => x.id == req.params.id);
   if (!o) return res.status(404).json({ error: 'Order not found' });
   const body = req.body || {};
@@ -637,6 +682,7 @@ app.patch('/api/orders/:id', admin, async (req, res) => {
     const note = String(body.note || '').trim().slice(0, 140);
     o.status = body.status;
     o.history = [...(o.history || []), { status: o.status, at: new Date().toISOString(), note }];
+    if (o.status === 'cancelled') { const pr = read('products'); if (restoreStock(o, pr)) await write('products', pr); }
   }
   if (ship !== undefined) {
     const sub = typeof o.subtotal === 'number' ? o.subtotal : o.items.reduce((m, i) => m + i.price * i.qty, 0);

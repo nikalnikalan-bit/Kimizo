@@ -34,6 +34,9 @@ th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);vertical-a
 .ord{border-bottom:1px solid var(--line);padding:12px 0;display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;font-size:14px}
 .ord small{color:var(--mute)}
 .tw{overflow-x:auto}
+.chk{display:flex;gap:8px;align-items:center;margin:0;padding:9px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font-size:14px;cursor:pointer}.chk input{width:auto}
+.chip{display:inline-block;margin:0 0 0 6px;padding:1px 8px;border-radius:99px;font-size:11px;font-weight:700;vertical-align:middle}
+.chip.soon{background:#fde9e6;color:#B5120F}.chip.nw{background:#fff1b8;color:#7a5b00}.chip.out{background:#eee;color:#555}
 #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:99px;font-size:14px}
 @media(max-width:700px){.g2,.g3{grid-template-columns:1fr}}
 </style>
@@ -75,6 +78,11 @@ th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);vertical-a
         </div>
       </div>
     </div>
+    <div class="g3">
+      <div><label>Stock quantity (blank = don't track)</label><input id="pst" type="number" min="0" step="1" placeholder="e.g. 25"></div>
+      <div><label>Status</label><label class="chk"><input id="psoon" type="checkbox"> Coming soon (shown with a cross, cannot be bought)</label></div>
+      <div><label>Badge</label><label class="chk"><input id="pnw" type="checkbox"> Always show NEW badge</label><small style="color:var(--mute)">New products get the NEW badge automatically for 14 days.</small></div>
+    </div>
     <label>More photos (optional · up to 5 · shown as a gallery on the product page)</label>
     <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
       <input id="pxf" type="file" accept="image/*" multiple style="width:auto;max-width:100%">
@@ -85,7 +93,7 @@ th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);vertical-a
     <p style="margin:14px 0 0"><button class="btn" id="save">Add product</button> <button class="btn o" id="cancel" hidden>Cancel edit</button></p>
   </div>
   <div class="box tw"><h2>All products (<span id="pcount">0</span>)</h2>
-    <table><thead><tr><th></th><th>Name</th><th>Category</th><th>Origin</th><th>Price</th><th>Shipping</th><th></th></tr></thead><tbody id="plist"></tbody></table>
+    <table><thead><tr><th></th><th>Name</th><th>Category</th><th>Origin</th><th>Price</th><th>Shipping</th><th>Stock</th><th></th></tr></thead><tbody id="plist"></tbody></table>
   </div>
 </section>
 
@@ -207,23 +215,26 @@ $('pxf').onchange=async()=>{
 };
 
 /* Products */
+const isNewP=p=>!p.soon&&(!!p.nw||(p.createdAt&&Date.now()-new Date(p.createdAt)<14*864e5));
+const chips=p=>(p.soon?'<span class="chip soon">Coming soon</span>':(p.stock!=null&&p.stock<=0?'<span class="chip out">Sold out</span>':''))+(isNewP(p)?'<span class="chip nw">NEW</span>':'');
+const stockCell=p=>p.stock==null?'<small style="color:var(--mute)">not tracked</small>':(p.stock<=0?'<b style="color:#B5120F">0</b>':(p.stock<=5?'<b style="color:#c25b00">'+p.stock+' (low)</b>':String(p.stock)));
 async function loadProducts(){
   PR=await api('/api/products');
   $('pcount').textContent=PR.length;
   $('subsl').innerHTML=[...new Set(PR.map(p=>p.sub).filter(Boolean))].map(c=>`<option value="${esc(c)}">`).join('');
   $('cats').innerHTML=[...new Set(PR.map(p=>p.c))].map(c=>`<option value="${esc(c)}">`).join('');
-  $('plist').innerHTML=PR.map(p=>`<tr><td><div class="th">${p.img?`<img src="${esc(p.img)}" alt="">`:esc(p.e)}</div></td><td>${esc(p.n)}</td><td>${esc(p.c)}${p.sub?' · '+esc(p.sub):''}</td><td>${esc(p.o)}</td><td>${inr(p.p)}${p.m>p.p?` <small style="color:var(--mute)"><s>${inr(p.m)}</s></small>`:''}</td><td>${p.ship==null||p.ship===''?'<small style="color:var(--mute)">default</small>':(Number(p.ship)>0?inr(p.ship):'Free')}</td><td style="white-space:nowrap"><button class="btn o s" data-edit="${p.id}">Edit</button> <button class="btn o s" data-del="${p.id}">Delete</button></td></tr>`).join('')||'<tr><td colspan="7">No products yet.</td></tr>';
+  $('plist').innerHTML=PR.map(p=>`<tr><td><div class="th">${p.img?`<img src="${esc(p.img)}" alt="">`:esc(p.e)}</div></td><td>${esc(p.n)}${chips(p)}</td><td>${esc(p.c)}${p.sub?' · '+esc(p.sub):''}</td><td>${esc(p.o)}</td><td>${inr(p.p)}${p.m>p.p?` <small style="color:var(--mute)"><s>${inr(p.m)}</s></small>`:''}</td><td>${p.ship==null||p.ship===''?'<small style="color:var(--mute)">default</small>':(Number(p.ship)>0?inr(p.ship):'Free')}</td><td>${stockCell(p)}</td><td style="white-space:nowrap"><button class="btn o s" data-edit="${p.id}">Edit</button> <button class="btn o s" data-del="${p.id}">Delete</button></td></tr>`).join('')||'<tr><td colspan="8">No products yet.</td></tr>';
 }
-function resetForm(){['pid','pn','pc','ps','pp','pm','pe','psh','pi','pd'].forEach(i=>$(i).value='');$('ftitle').textContent='Add new product';$('save').textContent='Add product';$('cancel').hidden=true;showPrev('');PX=[];drawPX()}
+function resetForm(){['pid','pn','pc','ps','pp','pm','pe','psh','pi','pd'].forEach(i=>$(i).value='');$('ftitle').textContent='Add new product';$('save').textContent='Add product';$('cancel').hidden=true;showPrev('');PX=[];drawPX();$('pst').value='';$('psoon').checked=false;$('pnw').checked=false}
 $('cancel').onclick=resetForm;
 $('save').onclick=async()=>{
-  const id=$('pid').value,b={n:$('pn').value,c:$('pc').value,sub:$('ps').value,o:$('po').value,p:$('pp').value,m:$('pm').value||$('pp').value,e:$('pe').value||'📦',ship:$('psh').value,img:$('pi').value,imgs:PX,desc:$('pd').value};
+  const id=$('pid').value,b={n:$('pn').value,c:$('pc').value,sub:$('ps').value,o:$('po').value,p:$('pp').value,m:$('pm').value||$('pp').value,e:$('pe').value||'📦',ship:$('psh').value,img:$('pi').value,imgs:PX,stock:$('pst').value,soon:$('psoon').checked,nw:$('pnw').checked,desc:$('pd').value};
   try{await api(id?'/api/products/'+id:'/api/products',id?'PUT':'POST',b);toast(id?'Product updated':'Product added');resetForm();loadProducts()}
   catch(e){toast(e.message)}
 };
 $('plist').onclick=async e=>{
   const ed=e.target.dataset.edit,dl=e.target.dataset.del;
-  if(ed){const p=PR.find(x=>x.id==ed);$('pid').value=p.id;$('pn').value=p.n;$('pc').value=p.c;$('ps').value=p.sub||'';$('po').value=p.o;$('pp').value=p.p;$('pm').value=p.m;$('pe').value=p.e;$('psh').value=p.ship==null?'':p.ship;$('pd').value=p.desc||'';showPrev(p.img);PX=Array.isArray(p.imgs)?[...p.imgs]:[];drawPX();$('ftitle').textContent='Edit product';$('save').textContent='Update product';$('cancel').hidden=false;scrollTo({top:0,behavior:'smooth'})}
+  if(ed){const p=PR.find(x=>x.id==ed);$('pid').value=p.id;$('pn').value=p.n;$('pc').value=p.c;$('ps').value=p.sub||'';$('po').value=p.o;$('pp').value=p.p;$('pm').value=p.m;$('pe').value=p.e;$('psh').value=p.ship==null?'':p.ship;$('pd').value=p.desc||'';showPrev(p.img);PX=Array.isArray(p.imgs)?[...p.imgs]:[];drawPX();$('pst').value=p.stock==null?'':p.stock;$('psoon').checked=!!p.soon;$('pnw').checked=!!p.nw;$('ftitle').textContent='Edit product';$('save').textContent='Update product';$('cancel').hidden=false;scrollTo({top:0,behavior:'smooth'})}
   if(dl&&confirm('Delete this product?')){try{await api('/api/products/'+dl,'DELETE');toast('Product deleted');loadProducts()}catch(x){toast(x.message)}}
 };
 

@@ -19,6 +19,7 @@
     document.title = p.n + ' – ' + (st.storeName || 'Kimizo');
     const off = p.m > p.p ? Math.round((1 - p.p / p.m) * 100) : 0;
     const flag = F[String(p.o).toLowerCase()] || '🌏';
+    const unav = unavailable(p), maxQ = p.stock != null ? Math.max(1, Math.min(20, p.stock)) : 20;
     const gal = [p.img, ...(Array.isArray(p.imgs) ? p.imgs : [])].filter(Boolean).filter((u, i, a) => a.indexOf(u) === i);
     const desc = p.desc || `${p.n} from ${p.o}, part of our ${p.sub || p.c} range. Carefully selected for quality and value, and delivered across India.`;
     const free = st.freeAbove > 0 ? ` (free above ${inr(st.freeAbove)})` : '';
@@ -29,14 +30,15 @@
     box.innerHTML = `
     <div class="pd" style="--c:${COLORS[p.id % 5]}">
       <div class="pd-gal">
-        <div class="pd-pic" id="pdpic"><i>${flag} ${esc(p.o)}</i>${gal.length ? `<img id="pdmain" src="${esc(gal[0])}" alt="${esc(p.n)}">` : pic(p)}${gal.length > 1 ? '<button type="button" class="pg-p" aria-label="Previous photo">‹</button><button type="button" class="pg-n" aria-label="Next photo">›</button>' : ''}${gal.length ? '<span class="pd-hint">🔍 Tap to zoom</span>' : ''}</div>
+        <div class="pd-pic" id="pdpic"><i>${flag} ${esc(p.o)}</i>${gal.length ? `<img id="pdmain" src="${esc(gal[0])}" alt="${esc(p.n)}">` : pic(p)}${badges(p)}${gal.length > 1 ? '<button type="button" class="pg-p" aria-label="Previous photo">‹</button><button type="button" class="pg-n" aria-label="Next photo">›</button>' : ''}${gal.length ? '<span class="pd-hint">🔍 Tap to zoom</span>' : ''}</div>
         ${gal.length > 1 ? `<div class="pd-thumbs">${gal.map((u, i) => `<button type="button" data-th="${i}" class="${i ? '' : 'on'}" aria-label="Photo ${i + 1}"><img src="${esc(u)}" alt=""></button>`).join('')}</div>` : ''}
       </div>
       <div class="pd-box">
         <h1>${esc(p.n)}</h1>
-        <div class="tags"><span>${esc(p.c)}</span>${p.sub ? `<span>${esc(p.sub)}</span>` : ''}<span>${flag} ${esc(p.o)}</span></div>
+        <div class="tags">${isNew(p) ? '<span class="tg-new">NEW</span>' : ''}${p.soon ? '<span class="tg-soon">COMING SOON</span>' : ''}<span>${esc(p.c)}</span>${p.sub ? `<span>${esc(p.sub)}</span>` : ''}<span>${flag} ${esc(p.o)}</span></div>
         <div class="pd-price"><b>${inr(p.p)}</b>${off ? `<s>${inr(p.m)}</s><em>${off}% off</em>` : ''}</div>
         ${off ? `<p class="pd-save">You save ${inr(p.m - p.p)}</p>` : '<p class="pd-save"></p>'}
+        ${stockLine(p)}
         <h2>About this product</h2>
         <p class="pd-desc">${esc(desc)}</p>
         <h2>Product details</h2>
@@ -47,11 +49,11 @@
           <tr><th>Price</th><td>${inr(p.p)}${off ? ` <small>(MRP ${inr(p.m)})</small>` : ''}</td></tr>
           <tr><th>Product ID</th><td>KZ-${String(p.id).padStart(4, '0')}</td></tr>
         </table>
-        <div class="pd-buy">
+        ${unav ? `<div class="pd-soon">${p.soon ? '⏳ Coming soon – this product will be available shortly.' : '😔 Sold out – currently out of stock.'}</div>` : `<div class="pd-buy">
           <div class="pd-qty"><button type="button" id="pdm" aria-label="Decrease quantity">−</button><span id="pdq" aria-live="polite">1</span><button type="button" id="pdp" aria-label="Increase quantity">+</button></div>
           <button type="button" class="add" id="pda">Add to cart</button>
           <button type="button" class="add buy" id="pdbuy">Buy now</button>
-        </div>
+        </div>`}
         <div class="pd-note">
           <span>🚚 Shipping ${shipTxt}</span>
           <span>🛡️ Quality checked before dispatch</span>
@@ -60,11 +62,15 @@
       </div>
     </div>`;
 
-    const q = () => { $('pdq').textContent = qty; };
-    $('pdm').onclick = () => { qty = Math.max(1, qty - 1); q(); };
-    $('pdp').onclick = () => { qty = Math.min(20, qty + 1); q(); };
-    $('pda').onclick = () => { cart[p.id] = (cart[p.id] || 0) + qty; drawCart(); toast(qty > 1 ? qty + ' items added to cart' : 'Added to cart'); };
-    $('pdbuy').onclick = () => { cart[p.id] = (cart[p.id] || 0) + qty; drawCart(); $('co').click(); };
+    if (!unav) {
+      const q = () => { $('pdq').textContent = qty; };
+      const have = () => cart[p.id] || 0;
+      const room = () => p.stock != null ? p.stock - have() : 99;   // how many more can still be added
+      $('pdm').onclick = () => { qty = Math.max(1, qty - 1); q(); };
+      $('pdp').onclick = () => { if (qty >= maxQ) { toast('Only ' + p.stock + ' available'); return; } qty = Math.min(maxQ, qty + 1); q(); };
+      $('pda').onclick = () => { if (qty > room()) { toast(room() > 0 ? 'Only ' + room() + ' more available' : 'You already have all available pieces in your cart'); return; } cart[p.id] = have() + qty; drawCart(); toast(qty > 1 ? qty + ' items added to cart' : 'Added to cart'); };
+      $('pdbuy').onclick = () => { if (qty <= room()) cart[p.id] = have() + qty; else if (!have()) { toast('Out of stock'); return; } drawCart(); $('co').click(); };
+    }
 
     // photo gallery: thumbnails, arrows, swipe, tap to open full picture
     let gi = 0;
@@ -93,7 +99,7 @@
       const l = list.filter(x => x.id !== p.id).sort((a, b) => (b.sub === p.sub) - (a.sub === p.sub)).slice(0, 4);
       if (!l.length) return;
       rel.innerHTML = `<h2 class="pd-rel">More in ${esc(p.c)}</h2><div class="grid">${l.map(x =>
-        `<article class="card" data-href="/product.html?id=${x.id}"><a class="pic" href="/product.html?id=${x.id}" aria-label="View ${esc(x.n)}"><i>${F[String(x.o).toLowerCase()] || '🌏'} ${esc(x.o)}</i>${pic(x)}</a><div class="info"><h3><a href="/product.html?id=${x.id}">${esc(x.n)}</a></h3><small>${esc(x.c)}${x.sub ? ' · ' + esc(x.sub) : ''}</small><div class="pr">${inr(x.p)}<s>${inr(x.m)}</s>${x.m > x.p ? `<em>${Math.round((1 - x.p / x.m) * 100)}% off</em>` : ''}</div><button class="add" data-a="${x.id}">Add to cart</button></div></article>`).join('')}</div>`;
+        `<article class="card${x.soon ? ' soon' : soldOut(x) ? ' sold' : ''}" data-href="/product.html?id=${x.id}"><a class="pic" href="/product.html?id=${x.id}" aria-label="View ${esc(x.n)}"><i>${F[String(x.o).toLowerCase()] || '🌏'} ${esc(x.o)}</i>${pic(x)}${badges(x)}</a><div class="info"><h3><a href="/product.html?id=${x.id}">${esc(x.n)}</a></h3><small>${esc(x.c)}${x.sub ? ' · ' + esc(x.sub) : ''}</small><div class="pr">${inr(x.p)}<s>${inr(x.m)}</s>${x.m > x.p ? `<em>${Math.round((1 - x.p / x.m) * 100)}% off</em>` : ''}</div>${stockLine(x)}${unavailable(x) ? `<button class="add" disabled>${x.soon ? 'Coming soon' : 'Sold out'}</button>` : `<button class="add" data-a="${x.id}">Add to cart</button>`}</div></article>`).join('')}</div>`;
     }).catch(() => {});
   }
 
