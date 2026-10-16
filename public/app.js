@@ -8,7 +8,7 @@ const G=id=>P.find(p=>p.id==id);
 const ORG=["All","Japan","Korea","China"];
 const F={japan:"🇯🇵",korea:"🇰🇷",china:"🇨🇳"};
 let cat="All",sub="All",org="All",cart=JSON.parse(localStorage.getItem("kz_cart")||"{}");
-let RT={},HR=[],hrShown=6; // RT = rating of each product, HR = latest reviews (home page)
+let RT={}; // RT = rating of each product (stars on the cards). Customer reviews are shown ONLY on the product page.
 const starsHtml=n=>{const k=Math.max(0,Math.min(5,Math.round(n)));return `<span class="stars" aria-label="${k} out of 5">${"★".repeat(k)}<i>${"★".repeat(5-k)}</i></span>`};
 let sq=""; // search text that is actually applied (only changes on Search button / Enter / suggestion click)
 const $=id=>document.getElementById(id);
@@ -86,30 +86,18 @@ async function drawRecent(el,exclude){
 function homeRecent(){
   if(!$("pager"))return;
   let s=$("recent");
-  if(!s){s=document.createElement("section");s.id="recent";s.className="rc";($("hrev")||$("pager")).after(s)}
+  if(!s){s=document.createElement("section");s.id="recent";s.className="rc";$("pager").after(s)}
   drawRecent(s);
 }
 
-/* ---------- Customer reviews on the home page ---------- */
-function drawHR(){
-  const s=$("hrev");if(!s)return;
-  if(!HR.length){s.innerHTML="";return}
-  const nm=n=>{const a=String(n||"Customer").trim().split(/\s+/);return a[0]+(a[1]?" "+a[1][0].toUpperCase()+".":"")};
-  const l=HR.slice(0,hrShown);
-  s.innerHTML=`<div class="rc-head"><h2 class="rc-t">What customers say</h2></div><div class="hr-grid">${l.map(r=>{
-    const d=r.createdAt?new Date(r.createdAt).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"}):"";
-    const ph=(r.images||[]).slice(0,3);
-    return `<article class="hr-card"><div class="hr-top"><span class="hr-av" aria-hidden="true">${esc((String(r.name||"C").trim()[0]||"C").toUpperCase())}</span><div><b>${esc(nm(r.name))}</b>${r.verified?'<span class="rv-ver">✔ Verified buyer</span>':""}<small>${esc(d)}</small></div></div>${starsHtml(r.rating)}${r.text?`<p>${esc(r.text)}</p>`:""}${ph.length?`<div class="hr-ph">${ph.map(u=>`<a href="/product.html?id=${r.productId}#rev"><img src="${esc(u)}" alt="Customer photo" loading="lazy"></a>`).join("")}</div>`:""}<a class="hr-prod" href="/product.html?id=${r.productId}#rev"><span class="hr-pi">${r.productImg?`<img src="${esc(r.productImg)}" alt="" loading="lazy">`:esc(r.productEmoji)}</span><span>${esc(r.productName)}</span></a></article>`}).join("")}</div>${HR.length>hrShown?'<button type="button" class="rv-more" data-hrmore>Show more reviews</button>':""}`;
-}
-async function homeReviews(){
+/* ---------- Star ratings on the home page product cards ----------
+   (the written customer reviews are NOT shown on the home page - only on each product's own page) */
+async function homeRatings(){
   if(!$("pager"))return;
-  let s=$("hrev");
-  if(!s){s=document.createElement("section");s.id="hrev";s.className="rc hr";$("pager").after(s)}
   try{
     const d=await fetch("/api/reviews/recent?limit=60",{cache:"no-store"}).then(r=>r.json());
-    RT=d.ratings||{};HR=d.reviews||[];
+    RT=d.ratings||{};
     if($("grid")&&P.length)render(); // add the star ratings to the product cards
-    drawHR();
   }catch{}
 }
 
@@ -159,7 +147,6 @@ document.addEventListener("click",e=>{
   const cd=e.target.closest(".card[data-href]");
   if(cd&&!e.target.closest("button,a")&&!e.metaKey&&!e.ctrlKey){location.href=cd.dataset.href;return}
   const b=e.target.closest("button");if(!b)return;
-  if(b.dataset.hrmore!==undefined){hrShown+=6;drawHR();return}
   if(b.dataset.rclear!==undefined){try{localStorage.removeItem(RK)}catch{}const r=$("recent");if(r)r.innerHTML="";return}
   if(b.dataset.c){cat=b.dataset.c;sub="All";page=1;render()}
   if(b.dataset.s){sub=b.dataset.s;page=1;render()}
@@ -211,7 +198,7 @@ $("co").onclick=()=>{
   location.href="/checkout.html";
 };
 const qp=new URLSearchParams(location.search).get("q");if(qp&&$("grid")){$("q").value=qp;sq=qp}
-fetch("/api/products").then(r=>r.json()).then(d=>{P=d;render();drawCart();homeReviews();homeRecent()}).catch(()=>{$("grid").innerHTML='<div class="empty">Could not load products. Is the server running?</div>'});
+fetch("/api/products").then(r=>r.json()).then(d=>{P=d;render();drawCart();homeRatings();homeRecent()}).catch(()=>{$("grid").innerHTML='<div class="empty">Could not load products. Is the server running?</div>'});
 
 function applySettings(){
   document.title=S.storeName+" – "+S.tagline;
