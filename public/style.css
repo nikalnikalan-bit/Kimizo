@@ -557,3 +557,8 @@ body{overflow-x:clip}
   .pf-av{width:70px;height:70px;font-size:30px}
   .pf-rev{flex-wrap:wrap}
 }
+/* ======== Image logo (paste at the END of style.css) ======== */
+.logo-img{display:inline-flex;align-items:center;flex:none;line-height:0;text-decoration:none;text-shadow:none}
+.logo-img img{height:36px;width:auto;display:block;filter:drop-shadow(2px 2px 0 var(--ink));transition:transform .12s}
+.logo-img:hover img{transform:rotate(-2deg) scale(1.04)}
+@media(max-width:700px){.logo-img img{height:30px}}
