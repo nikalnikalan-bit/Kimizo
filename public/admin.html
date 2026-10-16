@@ -223,7 +223,7 @@ async function loadProducts(){
   $('pcount').textContent=PR.length;
   $('subsl').innerHTML=[...new Set(PR.map(p=>p.sub).filter(Boolean))].map(c=>`<option value="${esc(c)}">`).join('');
   $('cats').innerHTML=[...new Set(PR.map(p=>p.c))].map(c=>`<option value="${esc(c)}">`).join('');
-  $('plist').innerHTML=PR.map(p=>`<tr><td><div class="th">${p.img?`<img src="${esc(p.img)}" alt="">`:esc(p.e)}</div></td><td>${esc(p.n)}${chips(p)}</td><td>${esc(p.c)}${p.sub?' · '+esc(p.sub):''}</td><td>${esc(p.o)}</td><td>${inr(p.p)}${p.m>p.p?` <small style="color:var(--mute)"><s>${inr(p.m)}</s></small>`:''}</td><td>${p.ship==null||p.ship===''?'<small style="color:var(--mute)">default</small>':(Number(p.ship)>0?inr(p.ship):'Free')}</td><td>${stockCell(p)}</td><td style="white-space:nowrap"><button class="btn o s" data-edit="${p.id}">Edit</button> <button class="btn o s" data-del="${p.id}">Delete</button></td></tr>`).join('')||'<tr><td colspan="8">No products yet.</td></tr>';
+  $('plist').innerHTML=[...PR].sort((a,b)=>(+b.id||0)-(+a.id||0)).map(p=>`<tr><td><div class="th">${p.img?`<img src="${esc(p.img)}" alt="">`:esc(p.e)}</div></td><td>${esc(p.n)}${chips(p)}</td><td>${esc(p.c)}${p.sub?' · '+esc(p.sub):''}</td><td>${esc(p.o)}</td><td>${inr(p.p)}${p.m>p.p?` <small style="color:var(--mute)"><s>${inr(p.m)}</s></small>`:''}</td><td>${p.ship==null||p.ship===''?'<small style="color:var(--mute)">default</small>':(Number(p.ship)>0?inr(p.ship):'Free')}</td><td>${stockCell(p)}</td><td style="white-space:nowrap"><button class="btn o s" data-edit="${p.id}">Edit</button> <button class="btn o s" data-del="${p.id}">Delete</button></td></tr>`).join('')||'<tr><td colspan="8">No products yet.</td></tr>';
 }
 function resetForm(){['pid','pn','pc','ps','pp','pm','pe','psh','pi','pd'].forEach(i=>$(i).value='');$('ftitle').textContent='Add new product';$('save').textContent='Add product';$('cancel').hidden=true;showPrev('');PX=[];drawPX();$('pst').value='';$('psoon').checked=false;$('pnw').checked=false}
 $('cancel').onclick=resetForm;
@@ -379,3 +379,4 @@ function saveRet(){
 </script>
 </body>
 </html>
+

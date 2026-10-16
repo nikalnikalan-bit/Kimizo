@@ -562,6 +562,7 @@ body{overflow-x:clip}
 .logo-img img{height:36px;width:auto;display:block;filter:drop-shadow(2px 2px 0 var(--ink));transition:transform .12s}
 .logo-img:hover img{transform:rotate(-2deg) scale(1.04)}
 @media(max-width:700px){.logo-img img{height:30px}}
+
 /* ======== NEW badge, Coming soon (cross), stock (paste at the END of style.css) ======== */
 
 /* badges on the product picture */
@@ -572,13 +573,7 @@ body{overflow-x:clip}
 .bdg.soon-t.out{background:var(--red);color:#fff;box-shadow:3px 3px 0 var(--ink)}
 .pd-pic .bdg.soon-t{font-size:20px;padding:8px 22px}
 
-/* big cross over a "coming soon" product */
-.xo{position:absolute;inset:0;z-index:2;pointer-events:none;background:
-  linear-gradient(to top right,transparent calc(50% - 3px),var(--ink) calc(50% - 3px),var(--ink) calc(50% + 3px),transparent calc(50% + 3px)),
-  linear-gradient(to bottom right,transparent calc(50% - 3px),var(--ink) calc(50% - 3px),var(--ink) calc(50% + 3px),transparent calc(50% + 3px)),
-  rgba(255,255,255,.55)}
-.card.soon .pic img,.card.sold .pic img,.pd-pic:has(.xo) img{filter:grayscale(1);opacity:.75}
-.card.sold .pic img{opacity:.6}
+/* coming soon / sold out products keep their normal picture, only the sticker shows */
 .card.soon .info h3 a,.card.soon .pr{color:var(--mute)}
 
 /* stock text */

@@ -13,7 +13,7 @@ const isNew=p=>!p.soon&&(!!p.nw||(p.createdAt&&Date.now()-new Date(p.createdAt)<
 const soldOut=p=>!p.soon&&p.stock!=null&&p.stock<=0;
 const unavailable=p=>!!p.soon||soldOut(p);
 // overlays inside the product picture
-const badges=p=>(p.soon?'<span class="xo" aria-hidden="true"></span><b class="bdg soon-t">COMING SOON</b>':soldOut(p)?'<b class="bdg soon-t out">SOLD OUT</b>':"")+(isNew(p)?'<b class="bdg new">NEW</b>':"");
+const badges=p=>(p.soon?'<b class="bdg soon-t">COMING SOON</b>':soldOut(p)?'<b class="bdg soon-t out">SOLD OUT</b>':"")+(isNew(p)?'<b class="bdg new">NEW</b>':"");
 const stockLine=p=>p.soon||p.stock==null?"":p.stock<=0?'<div class="stk out">Out of stock</div>':p.stock<=5?`<div class="stk low">🔥 Only ${p.stock} left!</div>`:`<div class="stk">📦 ${p.stock} in stock</div>`;
 const actions=p=>p.soon?'<button class="add" disabled>Coming soon</button>':soldOut(p)?'<button class="add" disabled>Sold out</button>':`<button class="add" data-a="${p.id}">Add to cart</button><button class="add buy" data-b="${p.id}">Buy now</button>`;
 let RT={},HR=[],hrShown=6; // RT = rating of each product, HR = latest reviews (home page)
@@ -42,6 +42,7 @@ function render(){
   const q=sq.trim().toLowerCase(),s=$("sort").value;
   let l=P.filter(p=>(org=="All"||p.o==org)&&(q?(p.n+" "+p.c+" "+(p.sub||"")+" "+p.o).toLowerCase().includes(q):(cat=="All"||p.c==cat)&&(sub=="All"||p.sub==sub)));
   const dc=x=>x.m>0?1-x.p/x.m:0;
+  if(s=="0")l.sort((a,b)=>(+b.id||0)-(+a.id||0));      // Featured = newest products first
   if(s=="1")l.sort((a,b)=>a.p-b.p);
   if(s=="2")l.sort((a,b)=>b.p-a.p);
   if(s=="3")l.sort((a,b)=>(+b.id||0)-(+a.id||0));      // newest = highest id first
