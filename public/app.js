@@ -9,13 +9,14 @@ const ORG=["All","Japan","Korea","China"];
 const F={japan:"🇯🇵",korea:"🇰🇷",china:"🇨🇳"};
 let cat="All",sub="All",org="All",cart=JSON.parse(localStorage.getItem("kz_cart")||"{}");
 // ---- product status: NEW badge, coming soon, stock ----
-const isNew=p=>!p.soon&&(!!p.nw||(p.createdAt&&Date.now()-new Date(p.createdAt)<14*864e5));
+const isNew=p=>!p.soon&&(!!p.nw||((p.launchedAt||p.createdAt)&&Date.now()-new Date(p.launchedAt||p.createdAt)<14*864e5));
+const hasPrice=p=>Number(p.p)>0;   // coming soon products can have no price
 const soldOut=p=>!p.soon&&p.stock!=null&&p.stock<=0;
 const unavailable=p=>!!p.soon||soldOut(p);
 // overlays inside the product picture
 const badges=p=>(p.soon?'<b class="bdg soon-t">COMING SOON</b>':soldOut(p)?'<b class="bdg soon-t out">SOLD OUT</b>':"")+(isNew(p)?'<b class="bdg new">NEW</b>':"");
 const stockLine=p=>p.soon||p.stock==null?"":p.stock<=0?'<div class="stk out">Out of stock</div>':p.stock<=5?`<div class="stk low">🔥 Only ${p.stock} left!</div>`:`<div class="stk">📦 ${p.stock} in stock</div>`;
-const actions=p=>p.soon?'<button class="add" disabled>Coming soon</button>':soldOut(p)?'<button class="add" disabled>Sold out</button>':`<button class="add" data-a="${p.id}">Add to cart</button><button class="add buy" data-b="${p.id}">Buy now</button>`;
+const actions=p=>p.soon?`<a class="add pb" href="/product.html?id=${p.id}#prebook">🔔 Pre-book</a>`:soldOut(p)?'<button class="add" disabled>Sold out</button>':`<button class="add" data-a="${p.id}">Add to cart</button><button class="add buy" data-b="${p.id}">Buy now</button>`;
 let sq=""; // search text that is actually applied (only changes on Search button / Enter / suggestion click)
 const $=id=>document.getElementById(id);
 let page=1,PER=15;
@@ -35,12 +36,27 @@ function nav(){
   sb.innerHTML=["All",...subs].map(s=>`<button class="${s==sub?'on':''}" data-s="${esc(s)}">${esc(s)}</button>`).join("");
   $("chips").innerHTML=ORG.map(o=>`<button class="${o==org?'on':''}" data-o="${o}">${F[o.toLowerCase()]||"🌏"} ${o}</button>`).join("");
 }
+const cardHTML=p=>`<article class="card${p.soon?" soon":soldOut(p)?" sold":""}" data-href="/product.html?id=${p.id}"><a class="pic" href="/product.html?id=${p.id}" aria-label="View ${esc(p.n)}"><i>${F[p.o.toLowerCase()]} ${p.o}</i>${pic(p)}${badges(p)}</a><div class="info"><h3><a href="/product.html?id=${p.id}">${esc(p.n)}</a></h3><small>${p.c}${p.sub?" · "+p.sub:""}</small>${stockLine(p)}${hasPrice(p)?`<div class="pr">${inr(p.p)}<s>${inr(p.m)}</s><em>${Math.round((1-p.p/p.m)*100)}% off</em></div>`:""}${actions(p)}</div></article>`;
+// "New arrivals" and "Coming soon" shelves above the main product list (home page, no filter / search active)
+function shelves(){
+  const sh=$("shop");if(!sh)return;
+  const show=!sq.trim()&&cat=="All"&&sub=="All"&&org=="All";
+  const byNew=(a,b)=>(+b.id||0)-(+a.id||0);
+  const fill=(id,cls,title,list,below)=>{
+    let el=$(id);if(!el){el=document.createElement("section");el.id=id;if(below&&$("pager"))$("pager").after(el);else sh.before(el)}
+    el.className="shelf "+cls;
+    el.innerHTML=list.length?`<div class="rc-head"><h2 class="rc-t">${title}</h2></div><div class="shelf-row">${list.map(cardHTML).join("")}</div>`:"";
+  };
+  fill("shNew","sh-new","🆕 New arrivals",show?P.filter(isNew).sort(byNew).slice(0,12):[]);
+  fill("shSoon","sh-soon","⏳ Coming soon",show?P.filter(p=>p.soon).sort(byNew).slice(0,12):[],true);   // below "All products"
+}
 function render(){
   if(!$("grid"))return;
   const q=sq.trim().toLowerCase(),s=$("sort").value;
   let l=P.filter(p=>(org=="All"||p.o==org)&&(q?(p.n+" "+p.c+" "+(p.sub||"")+" "+p.o).toLowerCase().includes(q):(cat=="All"||p.c==cat)&&(sub=="All"||p.sub==sub)));
+  // coming soon products have their own shelf, so they are not repeated in "All products" (they still show when you search or filter)
+  if(!q&&cat=="All"&&sub=="All"&&org=="All")l=l.filter(p=>!p.soon);
   const dc=x=>x.m>0?1-x.p/x.m:0;
-  if(s=="0")l.sort((a,b)=>(+b.id||0)-(+a.id||0));      // Featured = newest products first
   if(s=="1")l.sort((a,b)=>a.p-b.p);
   if(s=="2")l.sort((a,b)=>b.p-a.p);
   if(s=="3")l.sort((a,b)=>(+b.id||0)-(+a.id||0));      // newest = highest id first
@@ -50,8 +66,8 @@ function render(){
   const total=l.length,pages=Math.max(1,Math.ceil(total/PER));if(page>pages)page=pages;
   l=l.slice((page-1)*PER,page*PER);
   $("ttl").textContent=q?`Results for "${sq.trim()}"`:cat=="All"?"All products":(sub!="All"?cat+" · "+sub:cat);
-  $("grid").innerHTML=l.length?l.map(p=>`<article class="card${p.soon?" soon":soldOut(p)?" sold":""}" data-href="/product.html?id=${p.id}"><a class="pic" href="/product.html?id=${p.id}" aria-label="View ${esc(p.n)}"><i>${F[p.o.toLowerCase()]} ${p.o}</i>${pic(p)}${badges(p)}</a><div class="info"><h3><a href="/product.html?id=${p.id}">${esc(p.n)}</a></h3><small>${p.c}${p.sub?" · "+p.sub:""}</small>${stockLine(p)}<div class="pr">${inr(p.p)}<s>${inr(p.m)}</s><em>${Math.round((1-p.p/p.m)*100)}% off</em></div>${actions(p)}</div></article>`).join(""):`<div class="empty">No products found. Try another search or category.</div>`;
-  pager(pages,total);nav();
+  $("grid").innerHTML=l.length?l.map(cardHTML).join(""):`<div class="empty">No products found. Try another search or category.</div>`;
+  pager(pages,total);nav();shelves();
 }
 function pager(pages,total){
   const el=$("pager");if(!el)return;
@@ -88,12 +104,12 @@ async function drawRecent(el,exclude){
   if(!list.length){try{list=await fetch("/api/products").then(r=>r.json())}catch{return}}
   const l=ids.map(id=>list.find(p=>p.id==id)).filter(Boolean).slice(0,8);
   if(!l.length){el.innerHTML="";return}
-  el.innerHTML=`<div class="rc-head"><h2 class="rc-t">Recently viewed</h2><button type="button" class="rc-clear" data-rclear>Clear</button></div><div class="rc-row">${l.map(p=>`<a class="rc-card" href="/product.html?id=${p.id}"><span class="rc-pic">${p.img?`<img src="${esc(p.img)}" alt="" loading="lazy">`:esc(p.e)}</span><b>${esc(p.n)}</b><span class="rc-p">${inr(p.p)}${p.m>p.p?`<s>${inr(p.m)}</s>`:""}</span></a>`).join("")}</div>`;
+  el.innerHTML=`<div class="rc-head"><h2 class="rc-t">Recently viewed</h2><button type="button" class="rc-clear" data-rclear>Clear</button></div><div class="rc-row">${l.map(p=>`<a class="rc-card" href="/product.html?id=${p.id}"><span class="rc-pic">${p.img?`<img src="${esc(p.img)}" alt="" loading="lazy">`:esc(p.e)}</span><b>${esc(p.n)}</b><span class="rc-p">${hasPrice(p)?inr(p.p)+(p.m>p.p?`<s>${inr(p.m)}</s>`:""):""}</span></a>`).join("")}</div>`;
 }
 function homeRecent(){
   if(!$("pager"))return;
   let s=$("recent");
-  if(!s){s=document.createElement("section");s.id="recent";s.className="rc";$("pager").after(s)}
+  if(!s){s=document.createElement("section");s.id="recent";s.className="rc";($("shSoon")||$("pager")).after(s)}
   drawRecent(s);
 }
 
@@ -227,4 +243,30 @@ if(U){
   document.addEventListener("click",e=>{if(!e.target.closest(".um"))uclose()});
   document.addEventListener("keydown",e=>{if(e.key==="Escape")uclose()});
 }else $("auth").innerHTML='<a href="/login.html">Login / Sign up</a>';
+
+/* ---------- Notification bell (e.g. "your pre-booked product has arrived") ---------- */
+if(U){
+  const tk=localStorage.getItem("kz_token");
+  const box=document.createElement("div");box.className="nt";
+  box.innerHTML='<button type="button" class="nt-b" aria-haspopup="true" aria-expanded="false" aria-label="Notifications">🔔<b class="nt-c" hidden></b></button><div class="nt-m" hidden></div>';
+  $("auth").prepend(box);
+  const nb=box.querySelector(".nt-b"),nc=box.querySelector(".nt-c"),nm=box.querySelector(".nt-m");
+  let NL=[];
+  const when=d=>{try{return new Date(d).toLocaleDateString("en-IN",{day:"numeric",month:"short"})}catch{return""}};
+  const paint=()=>{
+    const un=NL.filter(n=>!n.read).length;nc.hidden=!un;nc.textContent=un>9?"9+":un;
+    nm.innerHTML='<div class="nt-h">Notifications</div>'+(NL.length?NL.slice(0,10).map(n=>`<a class="nt-i${n.read?"":" new"}" href="${esc(n.link||"#")}">${n.productId!=null?`<i class="nt-p">${n.img?`<img src="${esc(n.img)}" alt="" loading="lazy">`:esc(n.emoji||"📦")}</i>`:""}<div class="nt-x"><b>${esc(n.title)}</b><p>${esc(n.text)}</p><small>${esc(when(n.createdAt))}</small></div></a>`).join(""):'<p class="nt-e">No notifications yet.</p>');
+  };
+  const load=async()=>{try{const r=await fetch("/api/notifications",{headers:{Authorization:"Bearer "+tk},cache:"no-store"});if(r.ok){NL=await r.json();if(nm.hidden)paint()}}catch{}};
+  const closeNt=()=>{if(nm.hidden)return;nm.hidden=true;nb.setAttribute("aria-expanded","false");NL.forEach(n=>n.read=true);paint()};
+  nb.onclick=e=>{
+    e.stopPropagation();
+    if(!nm.hidden){closeNt();return}
+    nm.hidden=false;nb.setAttribute("aria-expanded","true");
+    if(NL.some(n=>!n.read))fetch("/api/notifications/read",{method:"POST",headers:{Authorization:"Bearer "+tk}}).catch(()=>{});
+  };
+  document.addEventListener("click",e=>{if(!e.target.closest(".nt"))closeNt()});
+  document.addEventListener("keydown",e=>{if(e.key==="Escape")closeNt()});
+  load();setInterval(load,60000);
+}
 if($("lo"))$("lo").onclick=e=>{e.preventDefault();localStorage.removeItem("kz_token");localStorage.removeItem("kz_user");location.reload()};

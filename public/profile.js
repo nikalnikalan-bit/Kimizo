@@ -15,9 +15,9 @@
   const fmt = (d, o) => d ? new Date(d).toLocaleDateString('en-IN', o || { day: 'numeric', month: 'short', year: 'numeric' }) : '';
   const stars = n => { const k = Math.max(0, Math.min(5, Math.round(n))); return `<span class="stars">${'★'.repeat(k)}<i>${'★'.repeat(5 - k)}</i></span>`; };
 
-  let me, orders = [], revs = [];
+  let me, orders = [], revs = [], pbs = [];
   try {
-    [me, orders, revs] = await Promise.all([call('/api/auth/me'), call('/api/my-orders').catch(() => []), call('/api/my-reviews').catch(() => [])]);
+    [me, orders, revs, pbs] = await Promise.all([call('/api/auth/me'), call('/api/my-orders').catch(() => []), call('/api/my-reviews').catch(() => []), call('/api/my-prebooks').catch(() => [])]);
   } catch (e) {
     if (e.message !== 'login') box.innerHTML = `<p class="pd-msg">${esc(e.message)}<br><br><a href="/">← Back to shop</a></p>`;
     return;
@@ -60,6 +60,19 @@
         : '<p class="rv-none">You have not placed any orders yet. <a href="/">Start shopping</a></p>'}
     </section>
 
+    <section class="pf-card" id="prebooks">
+      <h2>My pre-bookings</h2>
+      ${pbs.length ? pbs.map(b => `<article class="pf-rev">
+        <a class="hr-pi pf-pi" href="/product.html?id=${b.productId}">${b.productImg ? `<img src="${esc(b.productImg)}" alt="">` : esc(b.productEmoji)}</a>
+        <div class="pf-rb">
+          <a class="pf-pn" href="/product.html?id=${b.productId}">${esc(b.productName)}</a>
+          <div><small>${b.qty} piece${b.qty > 1 ? 's' : ''} · pre-booked ${esc(fmt(b.createdAt))}</small></div>
+          <p>${b.arrived ? `🎉 It has arrived! <a href="/product.html?id=${b.productId}">Order now</a>` : '⏳ Waiting for arrival. We will notify you.'}</p>
+        </div>
+        ${b.arrived ? '' : `<button type="button" class="rc-clear" data-pbx="${b.id}">Cancel</button>`}
+      </article>`).join('') : '<p class="rv-none">No pre-bookings yet. You can pre-book Coming soon products from their page.</p>'}
+    </section>
+
     <section class="pf-card" id="reviews">
       <h2>My reviews</h2>
       ${revs.length ? revs.map(r => `<article class="pf-rev">
@@ -97,6 +110,14 @@
   }
 
   box.addEventListener('click', async e => {
+    const x = e.target.closest('button[data-pbx]');
+    if (x) {
+      if (!confirm('Cancel this pre-booking?')) return;
+      x.disabled = true;
+      try { await call('/api/my-prebooks/' + x.dataset.pbx, 'DELETE'); pbs = pbs.filter(r => String(r.id) !== x.dataset.pbx); toast('Pre-booking cancelled'); draw(); document.getElementById('prebooks').scrollIntoView(); }
+      catch (er) { toast(er.message); x.disabled = false; }
+      return;
+    }
     const b = e.target.closest('button[data-del]'); if (!b) return;
     if (!confirm('Delete this review?')) return;
     b.disabled = true;

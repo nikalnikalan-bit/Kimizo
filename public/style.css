@@ -591,3 +591,58 @@ body{overflow-x:clip}
 .tags .tg-new{background:var(--yellow);box-shadow:2px 2px 0 var(--ink)}
 .tags .tg-soon{background:var(--ink);color:var(--yellow)}
 .pd-soon{margin-top:22px;padding:14px 16px;font-weight:700;background:var(--cream);border:3px dashed var(--ink);border-radius:12px}
+/* ======== "New arrivals" and "Coming soon" shelves (paste at the END of style.css) ======== */
+.shelf{margin:26px 4vw 6px}
+.shelf:empty{display:none}
+.shelf .rc-head{margin-bottom:10px}
+.sh-new .rc-t{background:var(--yellow)}
+.sh-soon .rc-t{background:var(--sky)}
+.shelf-row{display:flex;gap:22px;overflow-x:auto;padding:6px 10px 22px;scroll-snap-type:x proximity;scrollbar-width:thin}
+.shelf-row .card{flex:0 0 210px;scroll-snap-align:start}
+@media(max-width:700px){
+  .shelf{margin:22px 3vw 4px}
+  .shelf-row{gap:12px;padding:6px 6px 18px}
+  .shelf-row .card{flex-basis:164px}
+}
+/* ======== Pre-book + notification bell (paste at the END of style.css) ======== */
+
+/* Pre-book button on cards */
+a.add{display:block;text-align:center;text-decoration:none}
+.add.pb{background:var(--teal);color:var(--ink)}
+.add.pb:hover{background:#3fc2b0}
+
+/* Pre-book panel on the product page */
+.pd-pre{margin-top:22px;padding:16px;background:var(--cream);border:3px solid var(--ink);border-radius:14px;box-shadow:4px 4px 0 var(--ink)}
+.pd-pre h3{margin:0 0 4px;font-family:var(--h);font-weight:400;font-size:18px}
+.pd-pre p{margin:0 0 10px;font-size:14px}
+.pd-pre .pre-n{font-weight:700;color:var(--red-d)}
+.pre-row{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+.pre-row .add{flex:1;min-width:150px;margin-top:0}
+.pre-ok{margin:6px 0 12px;padding:10px 14px;font-weight:700;background:#e3f8ea;color:#14803c;border:3px solid #14803c;border-radius:10px}
+.pf-rb p a{color:var(--red-d);font-weight:700}
+
+/* notification bell (header) */
+#auth .nt{position:relative}
+#auth .nt-b{position:relative;width:40px;height:40px;display:grid;place-items:center;padding:0;font-size:18px;line-height:1;cursor:pointer;background:#fff;border:3px solid var(--ink);border-radius:50%;box-shadow:3px 3px 0 var(--ink);transition:transform .1s}
+#auth .nt-b:hover{transform:translate(-1px,-1px) rotate(-8deg)}
+#auth .nt-c{position:absolute;top:-8px;right:-8px;min-width:20px;padding:0 5px;font-size:11px;line-height:16px;text-align:center;color:#fff;background:var(--red);border:2px solid var(--ink);border-radius:99px}
+#auth .nt-c[hidden]{display:none}
+#auth .nt-m{position:absolute;right:-60px;top:calc(100% + 12px);z-index:40;width:330px;max-height:70vh;overflow:auto;padding:8px;background:var(--cream);border:3px solid var(--ink);border-radius:16px;box-shadow:6px 6px 0 var(--ink);white-space:normal;animation:ddpop .16s ease-out}
+#auth .nt-m[hidden]{display:none}
+#auth .nt-h{padding:4px 8px 8px;font-family:var(--h);font-size:16px;border-bottom:3px dashed var(--ink);margin-bottom:6px}
+#auth .nt-i{display:block;margin:4px 0;padding:10px 12px;color:var(--ink);text-decoration:none;background:#fff;border:3px solid transparent;border-radius:10px}
+#auth .nt-i.new{background:#fff7cf;border-color:var(--ink)}
+#auth .nt-i:hover{border-color:var(--ink);box-shadow:3px 3px 0 var(--ink)}
+#auth .nt-i b{display:block;font-size:14px}
+#auth .nt-i p{margin:2px 0 0;font-size:13px;color:#3a2f2b;font-weight:400}
+#auth .nt-i small{color:var(--mute);font-weight:400}
+#auth .nt-e{margin:8px;color:var(--mute);font-size:14px}
+@media(max-width:700px){
+  #auth .nt-m{position:fixed;right:3vw;left:3vw;top:56px;width:auto}
+}
+
+/* ======== Product picture beside each notification (paste at the END of style.css) ======== */
+#auth .nt-i{display:flex;align-items:flex-start;gap:10px}
+#auth .nt-p{flex:none;width:48px;height:48px;display:grid;place-items:center;overflow:hidden;font-size:22px;font-style:normal;background:#fff;border:2px solid var(--ink);border-radius:10px}
+#auth .nt-p img{width:100%;height:100%;object-fit:contain;display:block}
+#auth .nt-x{flex:1;min-width:0}

@@ -48,7 +48,7 @@ th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);vertical-a
 <header>
   <span class="logo">kimizo admin</span><a href="/" target="_blank">View store</a>
   <div class="tabs" id="tabs">
-    <button data-t="products" class="on">Products</button><button data-t="orders">Orders</button><button data-t="reviews">Reviews</button><button data-t="settings">Settings</button><button data-t="out">Log out</button>
+    <button data-t="products" class="on">Products</button><button data-t="orders">Orders</button><button data-t="reviews">Reviews</button><button data-t="prebooks">Pre-bookings</button><button data-t="settings">Settings</button><button data-t="out">Log out</button>
   </div>
 </header>
 <main>
@@ -63,7 +63,7 @@ th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);vertical-a
     </div>
     <div class="g3">
       <div><label>Origin *</label><select id="po"><option>Japan</option><option>Korea</option><option>China</option></select></div>
-      <div><label>Selling price ₹ *</label><input id="pp" type="number" min="1"></div>
+      <div><label>Selling price ₹ * <small style="color:var(--mute)">(can stay empty for Coming soon)</small></label><input id="pp" type="number" min="1"></div>
       <div><label>MRP ₹ (cut price)</label><input id="pm" type="number" min="1"></div>
     </div>
     <div class="g3">
@@ -80,7 +80,7 @@ th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);vertical-a
     </div>
     <div class="g3">
       <div><label>Stock quantity (blank = don't track)</label><input id="pst" type="number" min="0" step="1" placeholder="e.g. 25"></div>
-      <div><label>Status</label><label class="chk"><input id="psoon" type="checkbox"> Coming soon (shown with a cross, cannot be bought)</label></div>
+      <div><label>Status</label><label class="chk"><input id="psoon" type="checkbox"> Coming soon (customers can Pre-book, but cannot buy)</label><small style="color:var(--mute)">Untick it later to launch: pre-booked customers are notified automatically.</small></div>
       <div><label>Badge</label><label class="chk"><input id="pnw" type="checkbox"> Always show NEW badge</label><small style="color:var(--mute)">New products get the NEW badge automatically for 14 days.</small></div>
     </div>
     <label>More photos (optional · up to 5 · shown as a gallery on the product page)</label>
@@ -92,12 +92,25 @@ th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);vertical-a
     <textarea id="pd" rows="4" maxlength="2000" placeholder="Material, size, what's in the box, how to use..."></textarea>
     <p style="margin:14px 0 0"><button class="btn" id="save">Add product</button> <button class="btn o" id="cancel" hidden>Cancel edit</button></p>
   </div>
-  <div class="box tw"><h2>All products (<span id="pcount">0</span>)</h2>
-    <table><thead><tr><th></th><th>Name</th><th>Category</th><th>Origin</th><th>Price</th><th>Shipping</th><th>Stock</th><th></th></tr></thead><tbody id="plist"></tbody></table>
+  <div id="plists">
+    <div class="box tw" id="bxNew"><h2>🆕 New products (<span id="ncount">0</span>)</h2>
+      <table><thead><tr><th></th><th>Name</th><th>Category</th><th>Origin</th><th>Price</th><th>Shipping</th><th>Stock</th><th></th></tr></thead><tbody id="plistNew"></tbody></table></div>
+    <div class="box tw"><h2>All products (<span id="pcount">0</span>)</h2>
+      <table><thead><tr><th></th><th>Name</th><th>Category</th><th>Origin</th><th>Price</th><th>Shipping</th><th>Stock</th><th></th></tr></thead><tbody id="plist"></tbody></table></div>
+    <div class="box tw"><h2>⏳ Coming soon (<span id="scount">0</span>)</h2>
+      <table><thead><tr><th></th><th>Name</th><th>Category</th><th>Origin</th><th>Price</th><th>Shipping</th><th>Stock</th><th></th></tr></thead><tbody id="plistSoon"></tbody></table></div>
   </div>
 </section>
 
 <section id="t-orders" hidden><div class="box"><h2>Orders</h2><div id="olist"></div></div></section>
+
+<section id="t-prebooks" hidden>
+  <div class="box tw"><h2>Pre-booking summary</h2>
+    <small style="color:var(--mute)">When you untick "Coming soon" on a product, everyone who pre-booked it is notified automatically (bell in the store header, plus e-mail if e-mail is set up).</small>
+    <table style="margin-top:8px"><thead><tr><th>Product</th><th>Customers</th><th>Total qty</th><th>Status</th><th></th></tr></thead><tbody id="pbsum"></tbody></table></div>
+  <div class="box tw"><h2>All pre-bookings (<span id="pbcount">0</span>) <button class="btn o s" id="pbcsv" style="float:right">⬇ Export CSV</button></h2>
+    <table><thead><tr><th>Customer</th><th>Phone</th><th>Email</th><th>Product</th><th>Qty</th><th>Date</th><th>Status</th><th></th></tr></thead><tbody id="pblist"></tbody></table></div>
+</section>
 
 <section id="t-reviews" hidden><div class="box"><h2>Customer reviews</h2><div id="rvlist"></div></div></section>
 
@@ -157,9 +170,10 @@ $('tabs').onclick=e=>{
   const t=e.target.dataset.t;if(!t)return;
   if(t==='out'){bye();return}
   document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
-  ['products','orders','reviews','settings'].forEach(x=>$('t-'+x).hidden=x!==t);
+  ['products','orders','reviews','prebooks','settings'].forEach(x=>$('t-'+x).hidden=x!==t);
   if(t==='orders')loadOrders();
   if(t==='reviews')loadReviews();
+  if(t==='prebooks')loadPrebooks();
 };
 
 /* Image upload */
@@ -220,19 +234,24 @@ const chips=p=>(p.soon?'<span class="chip soon">Coming soon</span>':(p.stock!=nu
 const stockCell=p=>p.stock==null?'<small style="color:var(--mute)">not tracked</small>':(p.stock<=0?'<b style="color:#B5120F">0</b>':(p.stock<=5?'<b style="color:#c25b00">'+p.stock+' (low)</b>':String(p.stock)));
 async function loadProducts(){
   PR=await api('/api/products');
-  $('pcount').textContent=PR.length;
   $('subsl').innerHTML=[...new Set(PR.map(p=>p.sub).filter(Boolean))].map(c=>`<option value="${esc(c)}">`).join('');
   $('cats').innerHTML=[...new Set(PR.map(p=>p.c))].map(c=>`<option value="${esc(c)}">`).join('');
-  $('plist').innerHTML=[...PR].sort((a,b)=>(+b.id||0)-(+a.id||0)).map(p=>`<tr><td><div class="th">${p.img?`<img src="${esc(p.img)}" alt="">`:esc(p.e)}</div></td><td>${esc(p.n)}${chips(p)}</td><td>${esc(p.c)}${p.sub?' · '+esc(p.sub):''}</td><td>${esc(p.o)}</td><td>${inr(p.p)}${p.m>p.p?` <small style="color:var(--mute)"><s>${inr(p.m)}</s></small>`:''}</td><td>${p.ship==null||p.ship===''?'<small style="color:var(--mute)">default</small>':(Number(p.ship)>0?inr(p.ship):'Free')}</td><td>${stockCell(p)}</td><td style="white-space:nowrap"><button class="btn o s" data-edit="${p.id}">Edit</button> <button class="btn o s" data-del="${p.id}">Delete</button></td></tr>`).join('')||'<tr><td colspan="8">No products yet.</td></tr>';
+  const row=p=>`<tr><td><div class="th">${p.img?`<img src="${esc(p.img)}" alt="">`:esc(p.e)}</div></td><td>${esc(p.n)}${chips(p)}</td><td>${esc(p.c)}${p.sub?' · '+esc(p.sub):''}</td><td>${esc(p.o)}</td><td>${p.p>0?inr(p.p):'<small style="color:var(--mute)">no price</small>'}${p.p>0&&p.m>p.p?` <small style="color:var(--mute)"><s>${inr(p.m)}</s></small>`:''}</td><td>${p.ship==null||p.ship===''?'<small style="color:var(--mute)">default</small>':(Number(p.ship)>0?inr(p.ship):'Free')}</td><td>${stockCell(p)}</td><td style="white-space:nowrap"><button class="btn o s" data-edit="${p.id}">Edit</button> <button class="btn o s" data-del="${p.id}">Delete</button></td></tr>`;
+  const byNew=(a,b)=>(+b.id||0)-(+a.id||0), sorted=[...PR].sort(byNew);
+  const fill=(id,list,msg)=>{$(id).innerHTML=list.map(row).join('')||'<tr><td colspan="8" style="color:var(--mute)">'+msg+'</td></tr>'};
+  const nw=sorted.filter(isNewP), live=sorted.filter(p=>!p.soon), soon=sorted.filter(p=>p.soon);
+  $('ncount').textContent=nw.length;$('pcount').textContent=live.length;$('scount').textContent=soon.length;
+  $('bxNew').hidden=!nw.length;
+  fill('plistNew',nw,'');fill('plist',live,'No products yet.');fill('plistSoon',soon,'No coming soon products. Tick "Coming soon" on a product to add one here.');
 }
 function resetForm(){['pid','pn','pc','ps','pp','pm','pe','psh','pi','pd'].forEach(i=>$(i).value='');$('ftitle').textContent='Add new product';$('save').textContent='Add product';$('cancel').hidden=true;showPrev('');PX=[];drawPX();$('pst').value='';$('psoon').checked=false;$('pnw').checked=false}
 $('cancel').onclick=resetForm;
 $('save').onclick=async()=>{
   const id=$('pid').value,b={n:$('pn').value,c:$('pc').value,sub:$('ps').value,o:$('po').value,p:$('pp').value,m:$('pm').value||$('pp').value,e:$('pe').value||'📦',ship:$('psh').value,img:$('pi').value,imgs:PX,stock:$('pst').value,soon:$('psoon').checked,nw:$('pnw').checked,desc:$('pd').value};
-  try{await api(id?'/api/products/'+id:'/api/products',id?'PUT':'POST',b);toast(id?'Product updated':'Product added');resetForm();loadProducts()}
+  try{const d=await api(id?'/api/products/'+id:'/api/products',id?'PUT':'POST',b);toast(id?('Product updated'+(d&&d.notified?' · '+d.notified+' pre-booked customer'+(d.notified>1?'s':'')+' notified 🔔':'')):'Product added');resetForm();loadProducts()}
   catch(e){toast(e.message)}
 };
-$('plist').onclick=async e=>{
+$('plists').onclick=async e=>{
   const ed=e.target.dataset.edit,dl=e.target.dataset.del;
   if(ed){const p=PR.find(x=>x.id==ed);$('pid').value=p.id;$('pn').value=p.n;$('pc').value=p.c;$('ps').value=p.sub||'';$('po').value=p.o;$('pp').value=p.p;$('pm').value=p.m;$('pe').value=p.e;$('psh').value=p.ship==null?'':p.ship;$('pd').value=p.desc||'';showPrev(p.img);PX=Array.isArray(p.imgs)?[...p.imgs]:[];drawPX();$('pst').value=p.stock==null?'':p.stock;$('psoon').checked=!!p.soon;$('pnw').checked=!!p.nw;$('ftitle').textContent='Edit product';$('save').textContent='Update product';$('cancel').hidden=false;scrollTo({top:0,behavior:'smooth'})}
   if(dl&&confirm('Delete this product?')){try{await api('/api/products/'+dl,'DELETE');toast('Product deleted');loadProducts()}catch(x){toast(x.message)}}
@@ -262,6 +281,29 @@ $('olist').onclick=async e=>{
   const id=e.target.dataset.upd;if(!id)return;
   const status=document.querySelector(`select[data-oid="${id}"]`).value,note=document.querySelector(`input[data-note="${id}"]`).value;
   try{await api('/api/orders/'+id,'PATCH',{status,note});toast('Tracking updated');loadOrders()}catch(x){toast(x.message)}
+};
+
+/* Pre-bookings */
+let PB=[];
+const dt=d=>d?new Date(d).toLocaleDateString('en-IN'):'-';
+async function loadPrebooks(){
+  PB=await api('/api/prebooks');
+  $('pbcount').textContent=PB.length;
+  const g={};
+  PB.forEach(b=>{const x=g[b.productId]||(g[b.productId]={id:b.productId,name:b.productName,soon:b.soon,n:0,qty:0,wait:0});x.n++;x.qty+=b.qty;if(!b.notifiedAt)x.wait++});
+  $('pbsum').innerHTML=Object.values(g).map(x=>`<tr><td>${esc(x.name)}</td><td>${x.n}</td><td>${x.qty}</td><td>${x.soon?'<span class="chip soon">Coming soon · waiting</span>':(x.wait?`<span class="chip nw">Arrived · ${x.wait} not notified</span>`:'<span class="chip" style="background:#e3f8ea;color:#14803c">All notified</span>')}</td><td>${!x.soon&&x.wait?`<button class="btn s" data-pbn="${x.id}">🔔 Notify ${x.wait}</button>`:''}</td></tr>`).join('')||'<tr><td colspan="5" style="color:var(--mute)">No pre-bookings yet.</td></tr>';
+  $('pblist').innerHTML=PB.map(b=>`<tr><td>${esc(b.name)}</td><td>${esc(b.phone||'-')}</td><td>${esc(b.email)}</td><td>${esc(b.productName)}</td><td>${b.qty}</td><td>${dt(b.createdAt)}</td><td>${b.notifiedAt?'<small style="color:#14803c">✓ Notified '+dt(b.notifiedAt)+'</small>':'<small style="color:var(--mute)">Waiting</small>'}</td><td><button class="btn o s" data-pbd="${b.id}">Delete</button></td></tr>`).join('')||'<tr><td colspan="8" style="color:var(--mute)">No pre-bookings yet.</td></tr>';
+}
+$('t-prebooks').onclick=async e=>{
+  const n=e.target.dataset.pbn,d=e.target.dataset.pbd;
+  if(n){try{const r=await api('/api/prebooks/notify/'+n,'POST');toast(r.notified+' customer(s) notified 🔔');loadPrebooks()}catch(x){toast(x.message)}}
+  if(d&&confirm('Delete this pre-booking?')){try{await api('/api/prebooks/'+d,'DELETE');toast('Deleted');loadPrebooks()}catch(x){toast(x.message)}}
+};
+$('pbcsv').onclick=()=>{
+  if(!PB.length){toast('Nothing to export');return}
+  const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+  const rows=[['Customer','Phone','Email','Product','Qty','Pre-booked on','Notified on'],...PB.map(b=>[b.name,b.phone,b.email,b.productName,b.qty,dt(b.createdAt),b.notifiedAt?dt(b.notifiedAt):''])];
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+rows.map(r=>r.map(q).join(',')).join('\n')],{type:'text/csv'}));a.download='prebookings.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 };
 
 /* Reviews (moderation) */

@@ -1,0 +1,22 @@
+[
+  {
+    "id": 1,
+    "userId": 3,
+    "productId": 2,
+    "createdAt": "2026-10-17T06:12:47.748Z",
+    "read": true,
+    "title": "🎉 Mini Instant Camera has arrived!",
+    "text": "Good news from Kimizo! The product you pre-booked is now available. Order it now before it sells out.",
+    "link": "/product.html?id=2"
+  },
+  {
+    "id": 2,
+    "userId": 3,
+    "productId": 49,
+    "createdAt": "2026-10-17T06:21:11.136Z",
+    "read": true,
+    "title": "🎉 Round Sunglasses has arrived!",
+    "text": "Good news from Kimizo! The product you pre-booked is now available. Order it now before it sells out.",
+    "link": "/product.html?id=49"
+  }
+]

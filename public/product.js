@@ -36,7 +36,7 @@
       <div class="pd-box">
         <h1>${esc(p.n)}</h1>
         <div class="tags">${isNew(p) ? '<span class="tg-new">NEW</span>' : ''}${p.soon ? '<span class="tg-soon">COMING SOON</span>' : ''}<span>${esc(p.c)}</span>${p.sub ? `<span>${esc(p.sub)}</span>` : ''}<span>${flag} ${esc(p.o)}</span></div>
-        <div class="pd-price"><b>${inr(p.p)}</b>${off ? `<s>${inr(p.m)}</s><em>${off}% off</em>` : ''}</div>
+        ${hasPrice(p) ? `<div class="pd-price"><b>${inr(p.p)}</b>${off ? `<s>${inr(p.m)}</s><em>${off}% off</em>` : ''}</div>` : ''}
         ${off ? `<p class="pd-save">You save ${inr(p.m - p.p)}</p>` : '<p class="pd-save"></p>'}
         ${stockLine(p)}
         <h2>About this product</h2>
@@ -46,10 +46,10 @@
           <tr><th>Category</th><td>${esc(p.c)}</td></tr>
           ${p.sub ? `<tr><th>Type</th><td>${esc(p.sub)}</td></tr>` : ''}
           <tr><th>Sourced from</th><td>${flag} ${esc(p.o)}</td></tr>
-          <tr><th>Price</th><td>${inr(p.p)}${off ? ` <small>(MRP ${inr(p.m)})</small>` : ''}</td></tr>
+          ${hasPrice(p) ? `<tr><th>Price</th><td>${inr(p.p)}${off ? ` <small>(MRP ${inr(p.m)})</small>` : ''}</td></tr>` : ''}
           <tr><th>Product ID</th><td>KZ-${String(p.id).padStart(4, '0')}</td></tr>
         </table>
-        ${unav ? `<div class="pd-soon">${p.soon ? '⏳ Coming soon – this product will be available shortly.' : '😔 Sold out – currently out of stock.'}</div>` : `<div class="pd-buy">
+        ${p.soon ? '<div class="pd-pre" id="pdpre"></div>' : unav ? '<div class="pd-soon">😔 Sold out – currently out of stock.</div>' : `<div class="pd-buy">
           <div class="pd-qty"><button type="button" id="pdm" aria-label="Decrease quantity">−</button><span id="pdq" aria-live="polite">1</span><button type="button" id="pdp" aria-label="Increase quantity">+</button></div>
           <button type="button" class="add" id="pda">Add to cart</button>
           <button type="button" class="add buy" id="pdbuy">Buy now</button>
@@ -99,8 +99,50 @@
       const l = list.filter(x => x.id !== p.id).sort((a, b) => (b.sub === p.sub) - (a.sub === p.sub)).slice(0, 4);
       if (!l.length) return;
       rel.innerHTML = `<h2 class="pd-rel">More in ${esc(p.c)}</h2><div class="grid">${l.map(x =>
-        `<article class="card${x.soon ? ' soon' : soldOut(x) ? ' sold' : ''}" data-href="/product.html?id=${x.id}"><a class="pic" href="/product.html?id=${x.id}" aria-label="View ${esc(x.n)}"><i>${F[String(x.o).toLowerCase()] || '🌏'} ${esc(x.o)}</i>${pic(x)}${badges(x)}</a><div class="info"><h3><a href="/product.html?id=${x.id}">${esc(x.n)}</a></h3><small>${esc(x.c)}${x.sub ? ' · ' + esc(x.sub) : ''}</small><div class="pr">${inr(x.p)}<s>${inr(x.m)}</s>${x.m > x.p ? `<em>${Math.round((1 - x.p / x.m) * 100)}% off</em>` : ''}</div>${stockLine(x)}${unavailable(x) ? `<button class="add" disabled>${x.soon ? 'Coming soon' : 'Sold out'}</button>` : `<button class="add" data-a="${x.id}">Add to cart</button>`}</div></article>`).join('')}</div>`;
+        `<article class="card${x.soon ? ' soon' : soldOut(x) ? ' sold' : ''}" data-href="/product.html?id=${x.id}"><a class="pic" href="/product.html?id=${x.id}" aria-label="View ${esc(x.n)}"><i>${F[String(x.o).toLowerCase()] || '🌏'} ${esc(x.o)}</i>${pic(x)}${badges(x)}</a><div class="info"><h3><a href="/product.html?id=${x.id}">${esc(x.n)}</a></h3><small>${esc(x.c)}${x.sub ? ' · ' + esc(x.sub) : ''}</small>${hasPrice(x) ? `<div class="pr">${inr(x.p)}<s>${inr(x.m)}</s>${x.m > x.p ? `<em>${Math.round((1 - x.p / x.m) * 100)}% off</em>` : ''}</div>` : ''}${stockLine(x)}${x.soon ? `<a class="add pb" href="/product.html?id=${x.id}#prebook">🔔 Pre-book</a>` : unavailable(x) ? `<button class="add" disabled>Sold out</button>` : `<button class="add" data-a="${x.id}">Add to cart</button>`}</div></article>`).join('')}</div>`;
     }).catch(() => {});
+  }
+
+  /* ---------- Pre-book (coming soon products) ---------- */
+  function prebook(p) {
+    const el = $('pdpre'); if (!el) return;
+    const T = localStorage.getItem('kz_token');
+    let mine = null, qty = 1, busy = false;
+    const n = p.pre || 0;
+    const intro = `<h3>🔔 Pre-book this product</h3><p>Be the first to get it! Pre-book now and Kimizo will notify you as soon as it arrives. No payment needed now.</p>${n ? `<p class="pre-n">🔥 ${n} ${n > 1 ? 'people have' : 'person has'} already pre-booked</p>` : ''}`;
+    const msg = t => { const m = $('pmsg'); if (m) m.textContent = t || ''; };
+    function paint() {
+      if (!T) { el.innerHTML = intro + `<a class="rv-send" href="/login.html?next=${encodeURIComponent(location.pathname + location.search + '#prebook')}">Login to pre-book</a>`; return; }
+      if (mine) {
+        el.innerHTML = `<h3>🔔 Pre-booked</h3><div class="pre-ok">✔ You pre-booked <b>${mine.qty}</b> piece${mine.qty > 1 ? 's' : ''}. We will notify you from Kimizo when it arrives.</div><button type="button" class="rc-clear" id="pcx">Cancel pre-booking</button><p class="rv-msg" id="pmsg" role="status"></p>`;
+        return;
+      }
+      el.innerHTML = intro + `<div class="pre-row"><div class="pd-qty"><button type="button" id="pbm" aria-label="Fewer">−</button><span id="pbq">${qty}</span><button type="button" id="pbp" aria-label="More">+</button></div><button type="button" class="add" id="pbk">🔔 Pre-book now</button></div><p class="rv-msg" id="pmsg" role="status"></p>`;
+    }
+    async function load() {
+      if (T) { try { const r = await fetch('/api/my-prebooks', { headers: { Authorization: 'Bearer ' + T }, cache: 'no-store' }); if (r.ok) mine = (await r.json()).find(x => x.productId == p.id) || null; } catch { } }
+      paint();
+      if (location.hash === '#prebook') el.scrollIntoView({ block: 'center' });
+    }
+    el.addEventListener('click', async e => {
+      const b = e.target.closest('button'); if (!b || busy) return;
+      if (b.id === 'pbm') { qty = Math.max(1, qty - 1); $('pbq').textContent = qty; }
+      else if (b.id === 'pbp') { qty = Math.min(10, qty + 1); $('pbq').textContent = qty; }
+      else if (b.id === 'pbk' || b.id === 'pcx') {
+        busy = true; b.disabled = true; msg('Please wait...');
+        try {
+          const cancel = b.id === 'pcx';
+          const r = await fetch(cancel ? '/api/my-prebooks/' + mine.id : '/api/products/' + p.id + '/prebook', { method: cancel ? 'DELETE' : 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + T }, body: cancel ? undefined : JSON.stringify({ qty }) });
+          const d = await r.json().catch(() => ({}));
+          if (r.status === 401) { localStorage.removeItem('kz_token'); localStorage.removeItem('kz_user'); location.reload(); return; }
+          if (!r.ok) throw new Error(d.error || 'Could not complete this. Please try again.');
+          toast(cancel ? 'Pre-booking cancelled' : 'Pre-booked! We will notify you when it arrives');
+          mine = cancel ? null : d; qty = 1; paint();
+        } catch (er) { msg(er.message); b.disabled = false; }
+        busy = false;
+      }
+    });
+    load();
   }
 
   /* ---------- Recently viewed ---------- */
@@ -290,6 +332,6 @@
     fetch('/api/settings').then(r => r.json()).catch(() => ({}))
   ]).then(([p, st]) => {
     if (!p) return notFound('Sorry, this product is not available any more.');
-    draw(p, st); related(p); reviews(p); recent(p);
+    draw(p, st); related(p); prebook(p); reviews(p); recent(p);
   }).catch(() => notFound('Could not load the product. Is the server running?'));
 })();

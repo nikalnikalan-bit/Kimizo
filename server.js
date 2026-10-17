@@ -6,6 +6,23 @@ const path = require('path');
 const { hashPassword, verifyPassword, signToken, verifyToken } = require('./auth');
 const { readFromDrive, writeToDrive, readFromDriveStrict, updateDriveFile } = require('./drive-db');
 
+// Optional e-mail for "your pre-booked product has arrived". Works only if:  npm i nodemailer  and SMTP_HOST / SMTP_USER / SMTP_PASS are in .env
+let mailer = null;
+if (process.env.SMTP_HOST) {
+  try {
+    mailer = require('nodemailer').createTransport({
+      host: process.env.SMTP_HOST, port: Number(process.env.SMTP_PORT) || 587, secure: process.env.SMTP_SECURE === 'true',
+      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+    });
+  } catch (e) { console.warn('E-mail OFF: run "npm i nodemailer" to enable arrival e-mails'); }
+}
+console.log('Arrival e-mail:', mailer ? 'ON' : 'OFF (in-app notifications only)');
+const sendMail = async (to, subject, html) => {
+  if (!mailer || !to) return false;
+  try { await mailer.sendMail({ from: process.env.MAIL_FROM || process.env.SMTP_USER, to, subject, html }); return true; }
+  catch (e) { console.error('Mail failed:', e.message); return false; }
+};
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 const SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
@@ -16,7 +33,9 @@ const cache = {
   products: [],
   orders: [],
   settings: {},
-  reviews: []
+  reviews: [],
+  prebooks: [],
+  notifications: []
 };
 
 const file = n => path.join(__dirname, 'data', n + '.json');
@@ -36,13 +55,15 @@ const write = (n, d) => {
   return writeToDrive(n, d).catch(err => console.error(`Failed to sync ${n} to Drive:`, err.message));
 };
 
-// Reviews are loaded on their own, so a missing reviews.json in Drive can never block users/products/orders from loading
-const loadReviews = async () => {
+// Reviews, pre-bookings and notifications are loaded on their own, so a missing file in Drive can never block users/products/orders
+const loadExtra = async n => {
   try {
-    const r = await readFromDrive('reviews');
-    if (Array.isArray(r) && r.length) cache.reviews = r;
-  } catch (e) { console.warn('Reviews load warning:', e.message); }
+    const r = await readFromDrive(n);
+    if (Array.isArray(r) && r.length) cache[n] = r;
+  } catch (e) { console.warn(n + ' load warning:', e.message); }
 };
+const loadReviews = () => loadExtra('reviews');
+const loadAllExtra = () => Promise.all(['reviews', 'prebooks', 'notifications'].map(loadExtra));
 
 // On Vercel every serverless instance keeps its own memory copy. So reviews are re-read from Drive before they are shown
 // (at most every 3 seconds) and always before they are changed. This way a review posted on one instance shows up everywhere.
@@ -66,6 +87,10 @@ const refresh = async (names, force) => {
   }));
 };
 
+// number of people who pre-booked a product (shown on the product page)
+const preCount = id => read('prebooks').filter(x => x.productId == id).length;
+const withPre = p => p.soon ? { ...p, pre: preCount(p.id) } : p;
+
 app.use(express.json({ verify: (req, res, buf) => { req.rawBody = buf; } })); // rawBody is needed for the Razorpay webhook signature
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -83,7 +108,7 @@ app.use(async (req, res, next) => {
       if (Array.isArray(p) && p.length) cache.products = p;
       if (Array.isArray(o) && o.length) cache.orders = o;
       if (s && typeof s === 'object' && Object.keys(s).length) cache.settings = s;
-      await loadReviews();
+      await loadAllExtra();
     } catch (e) {
       console.warn('Drive background load warning:', e.message);
     }
@@ -330,24 +355,24 @@ app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'adm
 
 // ---------- Products ----------
 app.get('/api/products', async (req, res) => {
-  await refresh(['products']);
+  await refresh(['products', 'prebooks']);
   const { q, category, origin } = req.query;
   let list = read('products');
   if (category) list = list.filter(p => p.c === category);
   if (origin) list = list.filter(p => p.o === origin);
   if (q) list = list.filter(p => (p.n + p.c + (p.sub || '') + p.o).toLowerCase().includes(String(q).toLowerCase()));
-  res.json(list);
+  res.json(list.map(withPre));
 });
 
 app.get('/api/products/:id', async (req, res) => {
-  await refresh(['products']);
+  await refresh(['products', 'prebooks']);
   const p = read('products').find(x => x.id == req.params.id);
-  p ? res.json(p) : res.status(404).json({ error: 'Product not found' });
+  p ? res.json(withPre(p)) : res.status(404).json({ error: 'Product not found' });
 });
 
 const clean = b => ({
   n: String(b.n || '').trim(), e: b.e || '📦', c: String(b.c || '').trim(),
-  o: String(b.o || '').trim(), p: Number(b.p), m: Number(b.m || b.p),
+  o: String(b.o || '').trim(), p: Number(b.p) || 0, m: Number(b.m || b.p) || 0,   // price may stay 0 (empty) for coming soon products
   img: String(b.img || '').trim(),
   // extra gallery photos (up to 5), shown on the product page after the main image
   imgs: (Array.isArray(b.imgs) ? b.imgs : []).map(u => String(u || '').trim()).filter(Boolean).slice(0, 5),
@@ -360,14 +385,14 @@ const clean = b => ({
   nw: b.nw === true || b.nw === 'true',           // always show the NEW badge (new products also get it automatically for 14 days)
   desc: String(b.desc || '').trim().slice(0, 2000)
 });
-const valid = p => p.n && p.c && p.o && p.p > 0;
+const valid = p => p.n && p.c && p.o && (p.p > 0 || p.soon);
 // every image a product uses (main + gallery)
 const urlsOf = p => [p && p.img, ...((p && Array.isArray(p.imgs)) ? p.imgs : [])].filter(Boolean);
 
 app.post('/api/products', admin, async (req, res) => {
   await refresh(['products'], true);
   const list = read('products'), p = clean(req.body);
-  if (!valid(p)) return res.status(400).json({ error: 'n, c, o and p (price) are required' });
+  if (!valid(p)) return res.status(400).json({ error: 'Name, category, origin and price are required (price can stay empty only for Coming soon products)' });
   p.id = list.reduce((m, x) => Math.max(m, x.id), 0) + 1;
   p.createdAt = new Date().toISOString();   // used for the automatic NEW badge
   list.push(p);
@@ -379,14 +404,19 @@ app.put('/api/products/:id', admin, async (req, res) => {
   await refresh(['products'], true);
   const list = read('products'), i = list.findIndex(x => x.id == req.params.id);
   if (i < 0) return res.status(404).json({ error: 'Product not found' });
+  const wasSoon = !!list[i].soon;
   const p = { ...list[i], ...clean({ ...list[i], ...req.body }), id: list[i].id };
-  if (!valid(p)) return res.status(400).json({ error: 'Invalid product data' });
+  if (!valid(p)) return res.status(400).json({ error: 'Please enter the price (it can stay empty only while the product is marked Coming soon)' });
   // delete images that were removed from this product (main or gallery)
   const keep = new Set(urlsOf(p));
   urlsOf(list[i]).filter(u => !keep.has(u)).forEach(dropFile);
+  if (wasSoon && !p.soon) p.launchedAt = new Date().toISOString();   // the product just arrived: it also shows in New arrivals again
   list[i] = p;
   await write('products', list);
-  res.json(p);
+  // pre-booked customers are told automatically when the product stops being "coming soon"
+  let notified = 0;
+  if (wasSoon && !p.soon) notified = await notifyArrival(p).catch(e => { console.error('Arrival notify failed:', e.message); return 0; });
+  res.json({ ...p, notified });
 });
 
 app.delete('/api/products/:id', admin, async (req, res) => {
@@ -401,6 +431,9 @@ app.delete('/api/products/:id', admin, async (req, res) => {
     rv.filter(r => r.productId == req.params.id).forEach(r => (r.images || []).forEach(dropFile));
     await saveReviews(left).catch(e => console.error(e.message));
   }
+  await refresh(['prebooks'], true);
+  const pb = read('prebooks'), pbLeft = pb.filter(x => x.productId != req.params.id);
+  if (pbLeft.length !== pb.length) await saveList('prebooks', pbLeft).catch(e => console.error(e.message));
   res.json({ ok: true });
 });
 
@@ -416,22 +449,23 @@ const reviewOut = r => ({
 const hasBought = (uid, pid) => read('orders').some(o =>
   o.userId === uid && o.status !== 'cancelled' && o.status !== 'payment_pending' && (o.items || []).some(i => i.id == pid));
 
-// Saves reviews to Google Drive FIRST (so every serverless instance sees the same data).
+// Saves a list (reviews / pre-bookings / notifications) to Google Drive FIRST, so every serverless instance sees the same data.
 // Memory + local file are updated only after that worked, and a failure is reported instead of being hidden.
-const saveReviews = async list => {
+const saveList = async (name, list) => {
   if (process.env.GOOGLE_DRIVE_FOLDER_ID) {
-    try { await writeToDrive('reviews', list); }
+    try { await writeToDrive(name, list); }
     catch (e1) {
-      try { await updateDriveFile('reviews', list); }
+      try { await updateDriveFile(name, list); }
       catch (e2) {
-        console.error('Reviews save to Drive failed:', e1.message, '|', e2.message);
-        throw new Error('Could not save to Google Drive. Create a file named reviews.json (content: []) in your Drive folder once, then try again.');
+        console.error(name + ' save to Drive failed:', e1.message, '|', e2.message);
+        throw new Error('Could not save to Google Drive. Create a file named ' + name + '.json (content: []) in your Drive folder once, then try again.');
       }
     }
   }
-  cache.reviews = list;
-  try { fs.writeFileSync(file('reviews'), JSON.stringify(list, null, 2)); } catch (_) {}
+  cache[name] = list;
+  try { fs.writeFileSync(file(name), JSON.stringify(list, null, 2)); } catch (_) {}
 };
+const saveReviews = list => saveList('reviews', list);
 
 // everyone can read the reviews of a product
 app.get('/api/products/:id/reviews', async (req, res) => {
@@ -527,6 +561,118 @@ app.delete('/api/reviews/:id', admin, async (req, res) => {
   catch (e) { return res.status(500).json({ error: e.message }); }
   (r.images || []).forEach(dropFile);
   res.json({ ok: true });
+});
+
+// ---------- Pre-booking (coming soon products) & notifications ----------
+// tells everyone who pre-booked that the product has arrived (in-app notification + optional e-mail)
+const notifyArrival = async p => {
+  await refresh(['prebooks', 'notifications'], true);
+  const pbs = read('prebooks').map(x => ({ ...x })), notes = read('notifications').map(x => ({ ...x }));
+  const todo = pbs.filter(x => x.productId == p.id && !x.notifiedAt);
+  if (!todo.length) return 0;
+  const now = new Date().toISOString();
+  let nid = notes.reduce((m, x) => Math.max(m, x.id), 0);
+  todo.forEach(b => {
+    notes.push({
+      id: ++nid, userId: b.userId, productId: p.id, createdAt: now, read: false,
+      title: '🎉 ' + p.n + ' has arrived!',
+      text: 'Good news from Kimizo! The product you pre-booked is now available. Order it now before it sells out.',
+      link: '/product.html?id=' + p.id
+    });
+    b.notifiedAt = now;
+  });
+  await saveList('notifications', notes);
+  await saveList('prebooks', pbs);
+  const site = process.env.SITE_URL || '';
+  // product picture inside the e-mail (needs a full web address: set SITE_URL in .env, e.g. https://kimizo.vercel.app)
+  const pu = String(p.img || '');
+  const imgUrl = /^https:\/\//.test(pu) ? pu : (site && pu.startsWith('/') ? site.replace(/\/$/, '') + pu : '');
+  const imgHtml = imgUrl ? '<p><img src="' + imgUrl.replace(/"/g, '&quot;') + '" alt="" width="260" style="max-width:100%;border:3px solid #111;border-radius:12px"></p>' : '';
+  await Promise.allSettled(todo.slice(0, 300).map(b => sendMail(b.email, '🎉 ' + p.n + ' has arrived at Kimizo!',
+    '<div style="font-family:Arial,sans-serif;max-width:480px"><h2>Hi ' + String(b.name || '').replace(/[<>&]/g, '') + ',</h2>' +
+    '<p>Good news! <b>' + String(p.n).replace(/[<>&]/g, '') + '</b>, which you pre-booked, has arrived at <b>Kimizo</b>.</p>' + imgHtml +
+    '<p><a href="' + site + '/product.html?id=' + p.id + '" style="background:#E4231F;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:bold">Order now</a></p>' +
+    '<p style="color:#777;font-size:12px">You are receiving this because you pre-booked this product on Kimizo.</p></div>')));
+  return todo.length;
+};
+
+// customer: pre-book a coming soon product (booking again just changes the quantity)
+app.post('/api/products/:id/prebook', authed, async (req, res) => {
+  await refresh(['products', 'prebooks'], true);
+  const p = read('products').find(x => x.id == req.params.id);
+  if (!p) return res.status(404).json({ error: 'Product not found' });
+  if (!p.soon) return res.status(400).json({ error: 'This product is already available. You can order it now.' });
+  const u = users().find(x => x.id === req.user.id);
+  if (!u) return res.status(401).json({ error: 'Account not found. Please log in again.' });
+  const qty = Math.min(10, Math.max(1, Math.floor(Number((req.body || {}).qty)) || 1));
+  const list = read('prebooks').map(x => ({ ...x }));
+  let b = list.find(x => x.productId == p.id && x.userId === u.id);
+  if (b) Object.assign(b, { qty, name: u.name, phone: u.phone || '', email: u.email, updatedAt: new Date().toISOString() });
+  else {
+    b = { id: list.reduce((m, x) => Math.max(m, x.id), 0) + 1, productId: p.id, userId: u.id, name: u.name, phone: u.phone || '', email: u.email, qty, createdAt: new Date().toISOString(), notifiedAt: null };
+    list.push(b);
+  }
+  try { await saveList('prebooks', list); } catch (e) { return res.status(500).json({ error: e.message }); }
+  res.status(201).json(b);
+});
+
+app.get('/api/my-prebooks', authed, async (req, res) => {
+  await refresh(['prebooks', 'products']);
+  res.set('Cache-Control', 'no-store');
+  const prods = read('products');
+  res.json(read('prebooks').filter(x => x.userId === req.user.id)
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .map(b => { const p = prods.find(x => x.id == b.productId) || {}; return { ...b, productName: p.n || '(removed product)', productImg: p.img || '', productEmoji: p.e || '📦', arrived: !!p.n && !p.soon }; }));
+});
+app.delete('/api/my-prebooks/:id', authed, async (req, res) => {
+  await refresh(['prebooks'], true);
+  const all = read('prebooks'), b = all.find(x => x.id == req.params.id && x.userId === req.user.id);
+  if (!b) return res.status(404).json({ error: 'Pre-booking not found' });
+  try { await saveList('prebooks', all.filter(x => x !== b)); } catch (e) { return res.status(500).json({ error: e.message }); }
+  res.json({ ok: true });
+});
+
+// customer: notifications (the bell in the header)
+app.get('/api/notifications', authed, async (req, res) => {
+  await refresh(['notifications', 'products']);
+  res.set('Cache-Control', 'no-store');
+  const prods = read('products');
+  res.json(read('notifications').filter(n => n.userId === req.user.id).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 30)
+    // every notification about a product also carries that product's picture (read from the product, so it is always up to date)
+    .map(n => { const p = n.productId != null ? prods.find(x => x.id == n.productId) : null; return p ? { ...n, img: p.img || '', emoji: p.e || '📦' } : n; }));
+});
+app.post('/api/notifications/read', authed, async (req, res) => {
+  await refresh(['notifications'], true);
+  const list = read('notifications').map(x => ({ ...x }));
+  let changed = false;
+  list.forEach(n => { if (n.userId === req.user.id && !n.read) { n.read = true; changed = true; } });
+  if (changed) await saveList('notifications', list).catch(e => console.error(e.message));
+  res.json({ ok: true });
+});
+
+// admin: every pre-booking in one table
+app.get('/api/prebooks', admin, async (req, res) => {
+  await refresh(['prebooks', 'products'], true);
+  const prods = read('products');
+  res.json(read('prebooks').slice().reverse().map(b => {
+    const p = prods.find(x => x.id == b.productId) || {};
+    return { ...b, productName: p.n || '(deleted product)', soon: !!p.soon };
+  }));
+});
+app.delete('/api/prebooks/:id', admin, async (req, res) => {
+  await refresh(['prebooks'], true);
+  const all = read('prebooks'), b = all.find(x => x.id == req.params.id);
+  if (!b) return res.status(404).json({ error: 'Pre-booking not found' });
+  try { await saveList('prebooks', all.filter(x => x !== b)); } catch (e) { return res.status(500).json({ error: e.message }); }
+  res.json({ ok: true });
+});
+// admin: send the arrival notification again to people who were not notified yet (only after the product is no longer "coming soon")
+app.post('/api/prebooks/notify/:productId', admin, async (req, res) => {
+  await refresh(['products'], true);
+  const p = read('products').find(x => x.id == req.params.productId);
+  if (!p) return res.status(404).json({ error: 'Product not found' });
+  if (p.soon) return res.status(400).json({ error: 'Untick "Coming soon" on this product first. Customers are then notified automatically.' });
+  try { res.json({ notified: await notifyArrival(p) }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ---------- Razorpay ----------
@@ -709,7 +855,7 @@ app.use((err, req, res, next) =>
     if (Array.isArray(p) && p.length) cache.products = p;
     if (Array.isArray(o) && o.length) cache.orders = o;
     if (s && typeof s === 'object' && Object.keys(s).length) cache.settings = s;
-    await loadReviews();
+    await loadAllExtra();
 
     await ensureAdmin();
   } catch (e) {
