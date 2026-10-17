@@ -92,7 +92,7 @@ input:focus-visible,button:focus-visible{outline:3px solid #1B2A6B;outline-offse
 const $ = id => document.getElementById(id);
 const next = new URLSearchParams(location.search).get('next');
 const safe = n => n && n.startsWith('/') && !n.startsWith('//') ? n : '/';
-const go = u => location.href = u.role === 'admin' ? '/admin' : safe(next);
+const go = u => location.href = safe(next);   // the admin panel is a separate site now
 const digits = v => v.replace(/\D/g, '');
 
 function msg(id, t, ok) {

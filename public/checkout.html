@@ -116,8 +116,8 @@ input,textarea{width:100%;padding:10px 12px;border:3px solid var(--ink);border-r
         </div>
         <div class="box">
           <h2>Payment</h2>
-          <label class="pay"><input type="radio" name="pm" value="cod" checked> Cash on delivery</label>
-          <label class="pay off" id="onl"><input type="radio" name="pm" value="online" disabled> Pay online – UPI, Cards, Netbanking, Wallets <span id="onlnote">(coming soon)</span></label>
+          <label class="pay off" id="onl"><input type="radio" name="pm" value="online" checked disabled> Pay online – UPI, Cards, Netbanking, Wallets <span id="onlnote">(checking...)</span></label>
+          <p class="note" style="text-align:left">Cash on delivery is not available. Pay safely with UPI, card, netbanking or wallet.</p>
         </div>
       </div>
 
@@ -128,7 +128,7 @@ input,textarea{width:100%;padding:10px 12px;border:3px solid var(--ink);border-r
         <div class="sr" id="hint" style="font-size:12px;color:var(--mute)"></div>
         <div class="sr tot"><span>Total</span><span id="tot"></span></div>
         <p id="err" role="alert"></p>
-        <button class="place" id="place">Place order</button>
+        <button class="place" id="place">Pay now &amp; place order</button>
         <a class="back" href="/">← Back to shopping</a>
         <p class="note">Please check your items and address before placing the order.</p>
       </aside>
@@ -147,7 +147,7 @@ input,textarea{width:100%;padding:10px 12px;border:3px solid var(--ink);border-r
     <p>Thank you, <b id="oname"></b>. Your order number is <b id="oid"></b>.</p>
     <div class="box" style="text-align:left;margin-top:18px">
       <div id="olines"></div>
-      <div class="sr tot"><span id="otl">Total (pay on delivery)</span><span id="ototal"></span></div>
+      <div class="sr tot"><span id="otl">Total paid online</span><span id="ototal"></span></div>
       <p style="margin:12px 0 0;font-size:14px"><b>Delivering to:</b> <span id="oaddr"></span></p>
     </div>
     <a class="cta" href="/">Continue shopping</a>
@@ -165,7 +165,7 @@ input,textarea{width:100%;padding:10px 12px;border:3px solid var(--ink);border-r
       </div>
       <h2>Order placed!</h2>
       <div class="amt" id="fxamt"></div>
-      <p style="margin:0">Order <b id="fxid"></b> · <span id="fxpm">Pay on delivery</span></p>
+      <p style="margin:0">Order <b id="fxid"></b> · <span id="fxpm">Paid online</span></p>
       <div class="mascot-row">
         <svg class="mochi" viewBox="0 0 120 110" aria-hidden="true">
           <ellipse cx="60" cy="102" rx="34" ry="5" fill="#111" opacity=".2"/>
@@ -210,7 +210,7 @@ function showFx(mode,d){
 $('fxview').onclick=()=>showFx(null);
 
 let RZ_KEY=null;
-const method=()=>(document.querySelector('input[name=pm]:checked')||{}).value||'cod';
+const method=()=>'online';   // cash on delivery is switched off
 const btnLabel=()=>method()==='online'?'Pay now & place order':'Place order';
 function payOnline(d,name,phone){
   return new Promise((resolve,reject)=>{
@@ -269,7 +269,7 @@ $('place').onclick=async()=>{
   const address=`${addr}, ${city} - ${pin}`;
   try{
     const [r]=await Promise.all([fetch('/api/orders',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+tok},
-      body:JSON.stringify({name,phone,address,paymentMethod:online?'online':'cod',items:Object.entries(cart).map(([id,qty])=>({id:+id,qty}))})}),online?null:sleep(1400)]);
+      body:JSON.stringify({name,phone,address,paymentMethod:'online',items:Object.entries(cart).map(([id,qty])=>({id:+id,qty}))})}),online?null:sleep(1400)]);
     let d=await r.json();
     if(r.status===401){localStorage.removeItem('kz_token');localStorage.removeItem('kz_user');location.href='/login.html?next=/checkout.html';return}
     if(!r.ok)throw new Error(d.error||'Order failed');
@@ -277,8 +277,8 @@ $('place').onclick=async()=>{
     const paid=d.payment&&d.payment.status==='paid';
     cart={};save();
     $('review').hidden=true;$('ok').hidden=false;showFx('ok',d);
-    $('fxpm').textContent=paid?'Paid online ✓':'Pay on delivery';
-    $('otl').textContent=paid?'Total paid online':'Total (pay on delivery)';
+    $('fxpm').textContent='Paid online ✓';
+    $('otl').textContent='Total paid online';
     $('s2').classList.remove('on');$('s3').classList.add('on');
     $('oname').textContent=name;$('oid').textContent='#'+d.id;
     $('olines').innerHTML=d.items.map(i=>`<div class="sr"><span>${esc(i.name)} × ${i.qty}</span><span>${inr(i.price*i.qty)}</span></div>`).join('')+
@@ -290,7 +290,7 @@ $('place').onclick=async()=>{
 document.querySelectorAll('input[name=pm]').forEach(i=>i.onchange=()=>{$('place').textContent=btnLabel()});
 fetch('/api/payment/config').then(r=>r.json()).then(c=>{
   RZ_KEY=c.razorpayKey;
-  if(RZ_KEY){const o=document.querySelector('input[value=online]');o.disabled=false;$('onl').classList.remove('off');$('onlnote').remove()}
+  if(RZ_KEY){const o=document.querySelector('input[value=online]');o.disabled=false;$('onl').classList.remove('off');$('onlnote').remove()}else{$('onlnote').textContent='(temporarily unavailable)';$('place').disabled=true;$('err').textContent='Online payment is not available right now. Please try again later.'}
 }).catch(()=>{});
 
 if(tok){

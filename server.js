@@ -91,6 +91,24 @@ const refresh = async (names, force) => {
 const preCount = id => read('prebooks').filter(x => x.productId == id).length;
 const withPre = p => p.soon ? { ...p, pre: preCount(p.id) } : p;
 
+// ---- CORS: the admin panel is a separate site (for example kimizo-admin.vercel.app) and calls this API ----
+// .env / Vercel environment:  ADMIN_ORIGIN=https://your-admin-site.vercel.app   (several addresses allowed, separated by commas)
+const ADMIN_ORIGINS = String(process.env.ADMIN_ORIGIN || '').split(',').map(x => x.trim().replace(/\/$/, '')).filter(Boolean);
+if (!process.env.VERCEL) ADMIN_ORIGINS.push('http://localhost:4000', 'http://127.0.0.1:4000');   // local admin panel
+app.use((req, res, next) => {
+  const o = req.get('origin');
+  if (o && ADMIN_ORIGINS.includes(o)) {
+    res.set({
+      'Access-Control-Allow-Origin': o, 'Vary': 'Origin',
+      'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+      'Access-Control-Max-Age': '86400'
+    });
+    if (req.method === 'OPTIONS') return res.status(204).end();
+  }
+  next();
+});
+
 app.use(express.json({ verify: (req, res, buf) => { req.rawBody = buf; } })); // rawBody is needed for the Razorpay webhook signature
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -351,7 +369,8 @@ app.get('/api/env-check', (req, res) => res.json({
   driveFolder: !!process.env.GOOGLE_DRIVE_FOLDER_ID,
   imageStorage: process.env.BLOB_READ_WRITE_TOKEN ? 'vercel-blob' : (process.env.GOOGLE_DRIVE_FOLDER_ID ? 'google-drive' : 'local-disk')
 }));
-app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
+// the admin panel is a separate site now; the old /admin address only forwards there (set ADMIN_URL in .env)
+app.get('/admin', (req, res) => process.env.ADMIN_URL ? res.redirect(process.env.ADMIN_URL) : res.status(404).send('Not found'));
 
 // ---------- Products ----------
 app.get('/api/products', async (req, res) => {
@@ -716,8 +735,8 @@ app.post('/api/orders', authed, async (req, res) => {
   const { name, phone, address, items } = req.body || {};
   if (!name || !phone || !address || !Array.isArray(items) || !items.length)
     return res.status(400).json({ error: 'name, phone, address and items are required' });
-  const online = (req.body || {}).paymentMethod === 'online';
-  if (online && !rzpOn) return res.status(400).json({ error: 'Online payment is not available right now' });
+  // Cash on delivery is switched off: every order has to be paid online
+  if (!rzpOn) return res.status(503).json({ error: 'Online payment is not available right now. Please try again later.' });
   await refresh(['products', 'orders'], true);
   const products = read('products');
   // free the stock of online orders that were started but never paid (older than 30 minutes)
@@ -743,20 +762,15 @@ app.post('/api/orders', authed, async (req, res) => {
   const order = {
     id: orders.reduce((m, x) => Math.max(m, x.id), 1000) + 1,
     userId: req.user.id, name, phone, address, items: lines, subtotal: total, shipping, total: total + shipping,
-    status: online ? 'payment_pending' : 'placed', createdAt: new Date().toISOString(),
-    payment: { method: online ? 'razorpay' : 'cod', status: 'pending' },
-    history: online ? [] : [{ status: 'placed', at: new Date().toISOString(), note: 'Order received' }]
+    status: 'payment_pending', createdAt: new Date().toISOString(),   // becomes "placed" when the payment is confirmed
+    payment: { method: 'razorpay', status: 'pending' },
+    history: []
   };
   // take the stock now so two customers cannot buy the last piece
   products.forEach(p => { if (want[p.id] && p.stock != null) p.stock = Math.max(0, p.stock - want[p.id]); });
   const giveBack = () => products.forEach(p => { if (want[p.id] && p.stock != null) p.stock += want[p.id]; });
   order.stockTaken = true;
   orders.push(order);
-  if (!online) {
-    await write('orders', orders);
-    await write('products', products);
-    return res.status(201).json(order);
-  }
   try {
     // amount is calculated on the server from product prices; the browser can't change it
     const rz = await rzpCreateOrder(Math.round(order.total * 100), order.id, { orderId: String(order.id), userId: String(req.user.id) });
@@ -768,7 +782,7 @@ app.post('/api/orders', authed, async (req, res) => {
     orders.splice(orders.indexOf(order), 1);
     giveBack();
     console.error('Razorpay order failed:', e.message);
-    res.status(502).json({ error: 'Could not start online payment. Please try again or choose Cash on delivery.' });
+    res.status(502).json({ error: 'Could not start online payment. Please try again.' });
   }
 });
 
