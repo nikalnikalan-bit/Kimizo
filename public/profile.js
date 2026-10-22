@@ -1,10 +1,10 @@
 (async () => {
   const box = document.getElementById('pf');
   const TOKEN = localStorage.getItem('kz_token');
-  if (!TOKEN) { location.href = '/login.html?next=' + encodeURIComponent('/profile.html'); return; }
+  if (!TOKEN) { location.href = '/login?next=' + encodeURIComponent('/profile'); return; }
   const H = { Authorization: 'Bearer ' + TOKEN };
 
-  const kickOut = () => { localStorage.removeItem('kz_token'); localStorage.removeItem('kz_user'); location.href = '/login.html?next=' + encodeURIComponent('/profile.html'); };
+  const kickOut = () => { localStorage.removeItem('kz_token'); localStorage.removeItem('kz_user'); location.href = '/login?next=' + encodeURIComponent('/profile'); };
   const call = async (url, method = 'GET', body) => {
     const r = await fetch(url, { method, cache: 'no-store', headers: { ...H, ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined });
     const d = await r.json().catch(() => ({}));
@@ -38,7 +38,7 @@
         <small>Member since ${esc(fmt(me.createdAt, { month: 'long', year: 'numeric' }) || '-')}</small>
       </div>
       <div class="pf-stats">
-        <a href="/orders.html"><b>${orders.length}</b><span>Orders</span></a>
+        <a href="/orders"><b>${orders.length}</b><span>Orders</span></a>
         <a href="#reviews"><b>${revs.length}</b><span>Reviews</span></a>
       </div>
     </section>
@@ -56,18 +56,18 @@
 
     <section class="pf-card">
       <h2>Recent orders</h2>
-      ${orders.length ? orders.slice(0, 3).map(o => `<div class="pf-row"><div><b>#${esc(o.id)}</b> <small>${esc(fmt(o.createdAt))}</small><br><small>${(o.items || []).map(i => esc(i.name) + ' × ' + i.qty).join(', ')}</small></div><div class="pf-r"><b>${inr(o.total)}</b><span class="pf-chip s-${esc(o.status)}">${esc(STATUS[o.status] || o.status)}</span></div></div>`).join('') + '<a class="rv-more" href="/orders.html" style="text-decoration:none;text-align:center">View all orders</a>'
+      ${orders.length ? orders.slice(0, 3).map(o => `<div class="pf-row"><div><b>#${esc(o.id)}</b> <small>${esc(fmt(o.createdAt))}</small><br><small>${(o.items || []).map(i => esc(i.name) + ' × ' + i.qty).join(', ')}</small></div><div class="pf-r"><b>${inr(o.total)}</b><span class="pf-chip s-${esc(o.status)}">${esc(STATUS[o.status] || o.status)}</span></div></div>`).join('') + '<a class="rv-more" href="/orders" style="text-decoration:none;text-align:center">View all orders</a>'
         : '<p class="rv-none">You have not placed any orders yet. <a href="/">Start shopping</a></p>'}
     </section>
 
     <section class="pf-card" id="prebooks">
       <h2>My pre-bookings</h2>
       ${pbs.length ? pbs.map(b => `<article class="pf-rev">
-        <a class="hr-pi pf-pi" href="/product.html?id=${b.productId}">${b.productImg ? `<img src="${esc(b.productImg)}" alt="">` : esc(b.productEmoji)}</a>
+        <a class="hr-pi pf-pi" href="/product/${b.productId}">${b.productImg ? `<img src="${esc(b.productImg)}" alt="">` : esc(b.productEmoji)}</a>
         <div class="pf-rb">
-          <a class="pf-pn" href="/product.html?id=${b.productId}">${esc(b.productName)}</a>
+          <a class="pf-pn" href="/product/${b.productId}">${esc(b.productName)}</a>
           <div><small>${b.qty} piece${b.qty > 1 ? 's' : ''} · pre-booked ${esc(fmt(b.createdAt))}</small></div>
-          <p>${b.arrived ? `🎉 It has arrived! <a href="/product.html?id=${b.productId}">Order now</a>` : '⏳ Waiting for arrival. We will notify you.'}</p>
+          <p>${b.arrived ? `🎉 It has arrived! <a href="/product/${b.productId}">Order now</a>` : '⏳ Waiting for arrival. We will notify you.'}</p>
         </div>
         ${b.arrived ? '' : `<button type="button" class="rc-clear" data-pbx="${b.id}">Cancel</button>`}
       </article>`).join('') : '<p class="rv-none">No pre-bookings yet. You can pre-book Coming soon products from their page.</p>'}
@@ -76,9 +76,9 @@
     <section class="pf-card" id="reviews">
       <h2>My reviews</h2>
       ${revs.length ? revs.map(r => `<article class="pf-rev">
-        <a class="hr-pi pf-pi" href="/product.html?id=${r.productId}">${r.productImg ? `<img src="${esc(r.productImg)}" alt="">` : esc(r.productEmoji)}</a>
+        <a class="hr-pi pf-pi" href="/product/${r.productId}">${r.productImg ? `<img src="${esc(r.productImg)}" alt="">` : esc(r.productEmoji)}</a>
         <div class="pf-rb">
-          <a class="pf-pn" href="/product.html?id=${r.productId}#rev">${esc(r.productName)}</a>
+          <a class="pf-pn" href="/product/${r.productId}#rev">${esc(r.productName)}</a>
           <div>${stars(r.rating)} ${r.verified ? '<span class="rv-ver">✔ Verified buyer</span>' : ''} <small>${esc(fmt(r.createdAt))}</small></div>
           ${r.text ? `<p>${esc(r.text)}</p>` : ''}
           ${(r.images || []).length ? `<div class="rv-imgs">${r.images.map(u => `<a href="${esc(u)}" target="_blank" rel="noopener" class="pf-ph"><img src="${esc(u)}" alt="My photo" loading="lazy"></a>`).join('')}</div>` : ''}

@@ -16,7 +16,7 @@ const unavailable=p=>!!p.soon||soldOut(p);
 // overlays inside the product picture
 const badges=p=>(p.soon?'<b class="bdg soon-t">COMING SOON</b>':soldOut(p)?'<b class="bdg soon-t out">SOLD OUT</b>':"")+(isNew(p)?'<b class="bdg new">NEW</b>':"");
 const stockLine=p=>p.soon||p.stock==null?"":p.stock<=0?'<div class="stk out">Out of stock</div>':p.stock<=5?`<div class="stk low">🔥 Only ${p.stock} left!</div>`:`<div class="stk">📦 ${p.stock} in stock</div>`;
-const actions=p=>p.soon?`<a class="add pb" href="/product.html?id=${p.id}#prebook">🔔 Pre-book</a>`:soldOut(p)?'<button class="add" disabled>Sold out</button>':`<button class="add" data-a="${p.id}">Add to cart</button><button class="add buy" data-b="${p.id}">Buy now</button>`;
+const actions=p=>p.soon?`<a class="add pb" href="/product/${p.id}#prebook">🔔 Pre-book</a>`:soldOut(p)?'<button class="add" disabled>Sold out</button>':`<button class="add" data-a="${p.id}">Add to cart</button><button class="add buy" data-b="${p.id}">Buy now</button>`;
 let sq=""; // search text that is actually applied (only changes on Search button / Enter / suggestion click)
 const $=id=>document.getElementById(id);
 let page=1,PER=15;
@@ -36,7 +36,7 @@ function nav(){
   sb.innerHTML=["All",...subs].map(s=>`<button class="${s==sub?'on':''}" data-s="${esc(s)}">${esc(s)}</button>`).join("");
   $("chips").innerHTML=ORG.map(o=>`<button class="${o==org?'on':''}" data-o="${o}">${F[o.toLowerCase()]||"🌏"} ${o}</button>`).join("");
 }
-const cardHTML=p=>`<article class="card${p.soon?" soon":soldOut(p)?" sold":""}" data-href="/product.html?id=${p.id}"><a class="pic" href="/product.html?id=${p.id}" aria-label="View ${esc(p.n)}"><i>${F[p.o.toLowerCase()]} ${p.o}</i>${pic(p)}${badges(p)}</a><div class="info"><h3><a href="/product.html?id=${p.id}">${esc(p.n)}</a></h3><small>${p.c}${p.sub?" · "+p.sub:""}</small>${stockLine(p)}${hasPrice(p)?`<div class="pr">${inr(p.p)}<s>${inr(p.m)}</s><em>${Math.round((1-p.p/p.m)*100)}% off</em></div>`:""}${actions(p)}</div></article>`;
+const cardHTML=p=>`<article class="card${p.soon?" soon":soldOut(p)?" sold":""}" data-href="/product/${p.id}"><a class="pic" href="/product/${p.id}" aria-label="View ${esc(p.n)}"><i>${F[p.o.toLowerCase()]} ${p.o}</i>${pic(p)}${badges(p)}</a><div class="info"><h3><a href="/product/${p.id}">${esc(p.n)}</a></h3><small>${p.c}${p.sub?" · "+p.sub:""}</small>${stockLine(p)}${hasPrice(p)?`<div class="pr">${inr(p.p)}<s>${inr(p.m)}</s><em>${Math.round((1-p.p/p.m)*100)}% off</em></div>`:""}${actions(p)}</div></article>`;
 // "New arrivals" and "Coming soon" shelves above the main product list (home page, no filter / search active)
 function shelves(){
   const sh=$("shop");if(!sh)return;
@@ -104,7 +104,7 @@ async function drawRecent(el,exclude){
   if(!list.length){try{list=await fetch("/api/products").then(r=>r.json())}catch{return}}
   const l=ids.map(id=>list.find(p=>p.id==id)).filter(Boolean).slice(0,8);
   if(!l.length){el.innerHTML="";return}
-  el.innerHTML=`<div class="rc-head"><h2 class="rc-t">Recently viewed</h2><button type="button" class="rc-clear" data-rclear>Clear</button></div><div class="rc-row">${l.map(p=>`<a class="rc-card" href="/product.html?id=${p.id}"><span class="rc-pic">${p.img?`<img src="${esc(p.img)}" alt="" loading="lazy">`:esc(p.e)}</span><b>${esc(p.n)}</b><span class="rc-p">${hasPrice(p)?inr(p.p)+(p.m>p.p?`<s>${inr(p.m)}</s>`:""):""}</span></a>`).join("")}</div>`;
+  el.innerHTML=`<div class="rc-head"><h2 class="rc-t">Recently viewed</h2><button type="button" class="rc-clear" data-rclear>Clear</button></div><div class="rc-row">${l.map(p=>`<a class="rc-card" href="/product/${p.id}"><span class="rc-pic">${p.img?`<img src="${esc(p.img)}" alt="" loading="lazy">`:esc(p.e)}</span><b>${esc(p.n)}</b><span class="rc-p">${hasPrice(p)?inr(p.p)+(p.m>p.p?`<s>${inr(p.m)}</s>`:""):""}</span></a>`).join("")}</div>`;
 }
 function homeRecent(){
   if(!$("pager"))return;
@@ -214,8 +214,8 @@ if($("sort"))$("sort").onchange=()=>{page=1;render()};
 let rz;window.addEventListener("resize",()=>{clearTimeout(rz);rz=setTimeout(()=>{if($("grid")&&P.length&&calcPer()!==PER)render()},150)});
 $("co").onclick=()=>{
   if(!Object.keys(cart).length)return toast("Cart is empty");
-  if(!localStorage.getItem("kz_token")){location.href="/login.html?next=/checkout.html";return}
-  location.href="/checkout.html";
+  if(!localStorage.getItem("kz_token")){location.href="/login?next=/checkout";return}
+  location.href="/checkout";
 };
 const qp=new URLSearchParams(location.search).get("q");if(qp&&$("grid")){$("q").value=qp;sq=qp}
 fetch("/api/products").then(r=>r.json()).then(d=>{P=d;render();drawCart();homeRecent()}).catch(()=>{$("grid").innerHTML='<div class="empty">Could not load products. Is the server running?</div>'});
@@ -226,7 +226,7 @@ function applySettings(){
   document.querySelectorAll(".logo-img img").forEach(i=>i.alt=S.storeName);
   const hh=document.querySelector(".hero h1"),hp=document.querySelector(".hero p");
   if(hh)hh.textContent=S.heroTitle;if(hp)hp.textContent=S.heroText;
-  document.querySelector("footer").innerHTML=`<span class="logo" style="color:#fff">${esc(S.storeName)}</span><br>${esc(S.tagline)}${S.phone?" · 📞 "+esc(S.phone):""}${S.email?" · "+esc(S.email):""}<div class="copy">© ${new Date().getFullYear()} KIMIZO. ALL RIGHTS RESERVED.</div>`;
+  document.querySelector("footer").innerHTML=`<span class="logo" style="color:#fff">${esc(S.storeName)}</span><br>${esc(S.tagline)}${S.phone?" · 📞 "+esc(S.phone):""}${S.email?" · "+esc(S.email):""}<div class="copy">© ${new Date().getFullYear()} ZANO IT TECHNOLOGIES. ALL RIGHTS RESERVED.</div>`;
   let a=document.querySelector(".announce");
   if(S.announcement){if(!a){a=document.createElement("div");a.className="announce";document.body.prepend(a)}a.textContent=S.announcement}else if(a)a.remove();
 }
@@ -236,13 +236,13 @@ const U=JSON.parse(localStorage.getItem("kz_user")||"null");
 /* ---------- Account menu (avatar + dropdown) ---------- */
 if(U){
   const nm=String(U.name||"Customer").trim(),first=nm.split(/\s+/)[0];
-  $("auth").innerHTML=`<div class="um"><button type="button" class="um-b" aria-haspopup="menu" aria-expanded="false"><span class="um-av">${esc((nm[0]||"C").toUpperCase())}</span><span class="um-n">${esc(first)}</span><i class="um-c" aria-hidden="true"></i></button><div class="um-m" role="menu" hidden><div class="um-h"><span class="um-av big">${esc((nm[0]||"C").toUpperCase())}</span><div><b>${esc(nm)}</b><small>${esc(U.email||"")}</small></div></div><a role="menuitem" href="/profile.html">👤 My profile</a><a role="menuitem" href="/orders.html">📦 My orders</a><a role="menuitem" href="/profile.html#reviews">⭐ My reviews</a><a role="menuitem" href="#" id="lo" class="um-out">🚪 Logout</a></div></div>`;
+  $("auth").innerHTML=`<div class="um"><button type="button" class="um-b" aria-haspopup="menu" aria-expanded="false"><span class="um-av">${esc((nm[0]||"C").toUpperCase())}</span><span class="um-n">${esc(first)}</span><i class="um-c" aria-hidden="true"></i></button><div class="um-m" role="menu" hidden><div class="um-h"><span class="um-av big">${esc((nm[0]||"C").toUpperCase())}</span><div><b>${esc(nm)}</b><small>${esc(U.email||"")}</small></div></div><a role="menuitem" href="/profile">👤 My profile</a><a role="menuitem" href="/orders">📦 My orders</a><a role="menuitem" href="/profile#reviews">⭐ My reviews</a><a role="menuitem" href="#" id="lo" class="um-out">🚪 Logout</a></div></div>`;
   const ub=$("auth").querySelector(".um-b"),um=$("auth").querySelector(".um-m");
   const uclose=()=>{um.hidden=true;ub.setAttribute("aria-expanded","false")};
   ub.onclick=e=>{e.stopPropagation();const o=um.hidden;um.hidden=!o;ub.setAttribute("aria-expanded",o)};
   document.addEventListener("click",e=>{if(!e.target.closest(".um"))uclose()});
   document.addEventListener("keydown",e=>{if(e.key==="Escape")uclose()});
-}else $("auth").innerHTML='<a href="/login.html">Login / Sign up</a>';
+}else $("auth").innerHTML='<a href="/login">Login / Sign up</a>';
 
 /* ---------- Notification bell (e.g. "your pre-booked product has arrived") ---------- */
 if(U){

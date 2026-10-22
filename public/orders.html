@@ -59,7 +59,7 @@ h1{font-family:var(--h);font-weight:400;font-size:clamp(24px,4vw,34px);margin:0;
 <body>
 <header>
   <a href="/" class="logo logo-img" aria-label="kimizo home"><img src="logo.png" alt="kimizo" width="146" height="36"></a>
-  <div class="hl"><a href="/">Shop</a><a href="/profile.html">My profile</a><a href="#" id="lo">Logout</a></div>
+  <div class="hl"><a href="/">Shop</a><a href="/profile">My profile</a><a href="#" id="lo">Logout</a></div>
 </header>
 
 <main class="page">
@@ -74,7 +74,7 @@ const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const inr=n=>'₹'+Number(n).toLocaleString('en-IN');
 const tok=localStorage.getItem('kz_token');
-if(!tok)location.href='/login.html?next=/orders.html';
+if(!tok)location.href='/login?next=/orders';
 const ST=['placed','packed','shipped','delivered'];
 const LBL={placed:'Order placed',packed:'Packed',shipped:'Shipped',delivered:'Delivered',cancelled:'Cancelled'};
 const ICO={placed:'📝',packed:'📦',shipped:'🚚',delivered:'🏠'};
@@ -126,7 +126,7 @@ $('lo').onclick=e=>{e.preventDefault();localStorage.removeItem('kz_token');local
 async function load(){
   try{
     const [r,pr]=await Promise.all([fetch('/api/my-orders',{headers:{Authorization:'Bearer '+tok}}),fetch('/api/products')]);
-    if(r.status===401){localStorage.removeItem('kz_token');localStorage.removeItem('kz_user');location.href='/login.html?next=/orders.html';return}
+    if(r.status===401){localStorage.removeItem('kz_token');localStorage.removeItem('kz_user');location.href='/login?next=/orders';return}
     O=await r.json();P=await pr.json();
     if(first){first=false;const a=O.find(isActive)||O[0];if(a)open.add(a.id)}
     render();

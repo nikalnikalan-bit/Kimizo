@@ -111,7 +111,13 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json({ verify: (req, res, buf) => { req.rawBody = buf; } })); // rawBody is needed for the Razorpay webhook signature
-app.use(express.static(path.join(__dirname, 'public')));
+// clean product address:  /product/6   (the old /product.html?id=6 forwards there, so old links and notifications keep working)
+app.get('/product.html', (req, res, next) => /^\d+$/.test(String(req.query.id || '')) ? res.redirect(301, '/product/' + req.query.id) : next());
+app.get('/product/:id', (req, res) => res.sendFile(path.join(__dirname, 'public', 'product.html')));
+// clean addresses without ".html":  /login  /orders  /profile  /checkout   (old *.html links forward to them, with ?next=... kept)
+app.get(/^\/(login|orders|profile|checkout)\.html$/, (req, res) => { const q = req.url.indexOf('?'); res.redirect(301, '/' + req.params[0] + (q >= 0 ? req.url.slice(q) : '')); });
+app.get('/index.html', (req, res) => res.redirect(301, '/'));
+app.use(express.static(path.join(__dirname, 'public'), { extensions: ['html'] }));
 
 // Serverless / Vercel middleware: Request varumbo cache empty-aa irundha Google Drive-la irundhu load pannum
 app.use(async (req, res, next) => {
@@ -598,7 +604,7 @@ const notifyArrival = async p => {
       id: ++nid, userId: b.userId, productId: p.id, createdAt: now, read: false,
       title: '🎉 ' + p.n + ' has arrived!',
       text: 'Good news from Kimizo! The product you pre-booked is now available. Order it now before it sells out.',
-      link: '/product.html?id=' + p.id
+      link: '/product/' + p.id
     });
     b.notifiedAt = now;
   });
@@ -612,7 +618,7 @@ const notifyArrival = async p => {
   await Promise.allSettled(todo.slice(0, 300).map(b => sendMail(b.email, '🎉 ' + p.n + ' has arrived at Kimizo!',
     '<div style="font-family:Arial,sans-serif;max-width:480px"><h2>Hi ' + String(b.name || '').replace(/[<>&]/g, '') + ',</h2>' +
     '<p>Good news! <b>' + String(p.n).replace(/[<>&]/g, '') + '</b>, which you pre-booked, has arrived at <b>Kimizo</b>.</p>' + imgHtml +
-    '<p><a href="' + site + '/product.html?id=' + p.id + '" style="background:#E4231F;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:bold">Order now</a></p>' +
+    '<p><a href="' + site + '/product/' + p.id + '" style="background:#E4231F;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:bold">Order now</a></p>' +
     '<p style="color:#777;font-size:12px">You are receiving this because you pre-booked this product on Kimizo.</p></div>')));
   return todo.length;
 };

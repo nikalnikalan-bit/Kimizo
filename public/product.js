@@ -1,5 +1,6 @@
 (() => {
-  const id = new URLSearchParams(location.search).get('id');
+  // clean address /product/6 (the old product.html?id=6 also works)
+  const id = (location.pathname.match(/^\/product\/(\d+)\/?$/) || [])[1] || new URLSearchParams(location.search).get('id');
   const box = document.getElementById('pdb'), crumbs = document.getElementById('crumbs'), rel = document.getElementById('rel');
   const COLORS = ['var(--yellow)', 'var(--pink)', 'var(--teal)', 'var(--sky)', 'var(--orange)'];
   let qty = 1, cur = null;
@@ -99,7 +100,7 @@
       const l = list.filter(x => x.id !== p.id).sort((a, b) => (b.sub === p.sub) - (a.sub === p.sub)).slice(0, 4);
       if (!l.length) return;
       rel.innerHTML = `<h2 class="pd-rel">More in ${esc(p.c)}</h2><div class="grid">${l.map(x =>
-        `<article class="card${x.soon ? ' soon' : soldOut(x) ? ' sold' : ''}" data-href="/product.html?id=${x.id}"><a class="pic" href="/product.html?id=${x.id}" aria-label="View ${esc(x.n)}"><i>${F[String(x.o).toLowerCase()] || '🌏'} ${esc(x.o)}</i>${pic(x)}${badges(x)}</a><div class="info"><h3><a href="/product.html?id=${x.id}">${esc(x.n)}</a></h3><small>${esc(x.c)}${x.sub ? ' · ' + esc(x.sub) : ''}</small>${hasPrice(x) ? `<div class="pr">${inr(x.p)}<s>${inr(x.m)}</s>${x.m > x.p ? `<em>${Math.round((1 - x.p / x.m) * 100)}% off</em>` : ''}</div>` : ''}${stockLine(x)}${x.soon ? `<a class="add pb" href="/product.html?id=${x.id}#prebook">🔔 Pre-book</a>` : unavailable(x) ? `<button class="add" disabled>Sold out</button>` : `<button class="add" data-a="${x.id}">Add to cart</button>`}</div></article>`).join('')}</div>`;
+        `<article class="card${x.soon ? ' soon' : soldOut(x) ? ' sold' : ''}" data-href="/product/${x.id}"><a class="pic" href="/product/${x.id}" aria-label="View ${esc(x.n)}"><i>${F[String(x.o).toLowerCase()] || '🌏'} ${esc(x.o)}</i>${pic(x)}${badges(x)}</a><div class="info"><h3><a href="/product/${x.id}">${esc(x.n)}</a></h3><small>${esc(x.c)}${x.sub ? ' · ' + esc(x.sub) : ''}</small>${hasPrice(x) ? `<div class="pr">${inr(x.p)}<s>${inr(x.m)}</s>${x.m > x.p ? `<em>${Math.round((1 - x.p / x.m) * 100)}% off</em>` : ''}</div>` : ''}${stockLine(x)}${x.soon ? `<a class="add pb" href="/product/${x.id}#prebook">🔔 Pre-book</a>` : unavailable(x) ? `<button class="add" disabled>Sold out</button>` : `<button class="add" data-a="${x.id}">Add to cart</button>`}</div></article>`).join('')}</div>`;
     }).catch(() => {});
   }
 
@@ -112,7 +113,7 @@
     const intro = `<h3>🔔 Pre-book this product</h3><p>Be the first to get it! Pre-book now and Kimizo will notify you as soon as it arrives. No payment needed now.</p>${n ? `<p class="pre-n">🔥 ${n} ${n > 1 ? 'people have' : 'person has'} already pre-booked</p>` : ''}`;
     const msg = t => { const m = $('pmsg'); if (m) m.textContent = t || ''; };
     function paint() {
-      if (!T) { el.innerHTML = intro + `<a class="rv-send" href="/login.html?next=${encodeURIComponent(location.pathname + location.search + '#prebook')}">Login to pre-book</a>`; return; }
+      if (!T) { el.innerHTML = intro + `<a class="rv-send" href="/login?next=${encodeURIComponent(location.pathname + location.search + '#prebook')}">Login to pre-book</a>`; return; }
       if (mine) {
         el.innerHTML = `<h3>🔔 Pre-booked</h3><div class="pre-ok">✔ You pre-booked <b>${mine.qty}</b> piece${mine.qty > 1 ? 's' : ''}. We will notify you from Kimizo when it arrives.</div><button type="button" class="rc-clear" id="pcx">Cancel pre-booking</button><p class="rv-msg" id="pmsg" role="status"></p>`;
         return;
@@ -246,7 +247,7 @@
     function drawForm() {
       if (!TOKEN()) {
         const next = encodeURIComponent(location.pathname + location.search);
-        $('rvf').innerHTML = `<h3>Bought this product?</h3><p class="rv-sub">Login to rate it and share photos with other customers.</p><a class="rv-send" href="/login.html?next=${next}">Login to write a review</a>`;
+        $('rvf').innerHTML = `<h3>Bought this product?</h3><p class="rv-sub">Login to rate it and share photos with other customers.</p><a class="rv-send" href="/login?next=${next}">Login to write a review</a>`;
         return;
       }
       $('rvf').innerHTML = `<h3>Write a review</h3>

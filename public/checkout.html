@@ -185,7 +185,7 @@ input,textarea{width:100%;padding:10px 12px;border:3px solid var(--ink);border-r
         </svg>
         <div class="bubble">ありがとう！<small>Arigatou · 谢谢 · Thank you!</small></div>
       </div>
-      <div class="fxbtns"><button type="button" id="fxview">View details</button><a class="trk" href="/orders.html">Track order</a><a href="/">Continue shopping</a></div>
+      <div class="fxbtns"><button type="button" id="fxview">View details</button><a class="trk" href="/orders">Track order</a><a href="/">Continue shopping</a></div>
     </div>
   </div>
 </div>
@@ -196,7 +196,7 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const inr=n=>'₹'+Number(n).toLocaleString('en-IN');
 const tok=localStorage.getItem('kz_token');
 const U=JSON.parse(localStorage.getItem('kz_user')||'null');
-if(!tok){location.href='/login.html?next=/checkout.html'}
+if(!tok){location.href='/login?next=/checkout'}
 let P=[],S={shippingFee:0,freeAbove:0},cart=JSON.parse(localStorage.getItem('kz_cart')||'{}');
 const G=id=>P.find(p=>p.id==id);
 const pic=p=>p.img?`<img src="${esc(p.img)}" alt="">`:esc(p.e);
@@ -277,7 +277,7 @@ $('place').onclick=async()=>{
     const [r]=await Promise.all([fetch('/api/orders',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+tok},
       body:JSON.stringify({name,phone,address,paymentMethod:'online',items:Object.entries(cart).map(([id,qty])=>({id:+id,qty}))})}),online?null:sleep(1400)]);
     let d=await r.json();
-    if(r.status===401){localStorage.removeItem('kz_token');localStorage.removeItem('kz_user');location.href='/login.html?next=/checkout.html';return}
+    if(r.status===401){localStorage.removeItem('kz_token');localStorage.removeItem('kz_user');location.href='/login?next=/checkout';return}
     if(!r.ok)throw new Error(d.error||'Order failed');
     if(online&&d.razorpay)d=await payOnline(d,name,phone);
     const paid=d.payment&&d.payment.status==='paid';
