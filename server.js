@@ -94,6 +94,7 @@ const withPre = p => p.soon ? { ...p, pre: preCount(p.id) } : p;
 // ---- CORS: the admin panel is a separate site (for example kimizo-admin.vercel.app) and calls this API ----
 // .env / Vercel environment:  ADMIN_ORIGIN=https://your-admin-site.vercel.app   (several addresses allowed, separated by commas)
 const ADMIN_ORIGINS = String(process.env.ADMIN_ORIGIN || '').split(',').map(x => x.trim().replace(/\/$/, '')).filter(Boolean);
+if (!ADMIN_ORIGINS.includes('https://kimizo-admin.vercel.app')) ADMIN_ORIGINS.push('https://kimizo-admin.vercel.app');   // built-in: the Kimizo admin site
 if (!process.env.VERCEL) ADMIN_ORIGINS.push('http://localhost:4000', 'http://127.0.0.1:4000');   // local admin panel
 app.use((req, res, next) => {
   const o = req.get('origin');
@@ -367,6 +368,7 @@ app.get('/api/env-check', (req, res) => res.json({
   blobToken: !!process.env.BLOB_READ_WRITE_TOKEN,
   razorpay: !!(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET),
   driveFolder: !!process.env.GOOGLE_DRIVE_FOLDER_ID,
+  adminOrigins: ADMIN_ORIGINS,   // which admin sites may call this API (from ADMIN_ORIGIN) - empty list = CORS is not set up
   imageStorage: process.env.BLOB_READ_WRITE_TOKEN ? 'vercel-blob' : (process.env.GOOGLE_DRIVE_FOLDER_ID ? 'google-drive' : 'local-disk')
 }));
 // the admin panel is a separate site now; the old /admin address only forwards there (set ADMIN_URL in .env)
@@ -790,6 +792,7 @@ app.post('/api/orders', authed, async (req, res) => {
 app.post('/api/payment/verify', authed, async (req, res) => {
   if (!rzpOn) return res.status(400).json({ error: 'Online payment is not available' });
   const { orderId, razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body || {};
+  await refresh(['orders'], true);   // the order may have been created on another serverless instance
   const orders = read('orders'), o = orders.find(x => x.id == orderId && x.userId === req.user.id);
   if (!o || !o.payment || !razorpay_order_id || o.payment.rzpOrderId !== razorpay_order_id)
     return res.status(400).json({ error: 'Order not found' });
@@ -811,14 +814,23 @@ app.post('/api/payment/webhook', async (req, res) => {
   const ev = req.body || {};
   if (ev.event === 'payment.captured' || ev.event === 'order.paid') {
     const pay = (ev.payload && ev.payload.payment && ev.payload.payment.entity) || {};
+    await refresh(['orders'], true);
     const orders = read('orders'), o = orders.find(x => x.payment && x.payment.rzpOrderId && x.payment.rzpOrderId === pay.order_id);
     if (o && pay.amount === Math.round(o.total * 100) && markPaid(o, pay.id)) await write('orders', orders);
   }
   res.json({ ok: true });
 });
 
-app.get('/api/my-orders', authed, (req, res) => res.json(read('orders').filter(o => o.userId === req.user.id && o.status !== 'payment_pending').reverse()));
-app.get('/api/orders', admin, (req, res) => res.json(read('orders').filter(o => o.status !== 'payment_pending').reverse()));
+app.get('/api/my-orders', authed, async (req, res) => {
+  await refresh(['orders']);
+  res.set('Cache-Control', 'no-store');
+  res.json(read('orders').filter(o => o.userId === req.user.id && o.status !== 'payment_pending').reverse());
+});
+app.get('/api/orders', admin, async (req, res) => {
+  await refresh(['orders'], true);
+  res.set('Cache-Control', 'no-store');
+  res.json(read('orders').filter(o => o.status !== 'payment_pending').reverse());
+});
 
 app.patch('/api/orders/:id', admin, async (req, res) => {
   await refresh(['products', 'orders'], true);
