@@ -42,6 +42,8 @@ input,textarea{width:100%;padding:10px 12px;border:3px solid var(--ink);border-r
 .place:disabled{opacity:.6}
 .back{display:block;text-align:center;margin-top:14px;color:var(--ink);font-weight:700}
 .note{font-size:12px;color:var(--mute);text-align:center;margin:10px 0 0}
+.pinmsg{display:block;min-height:16px;margin-top:4px;font-size:12px;font-weight:700;color:var(--mute)}
+.pinmsg.ok{color:#14803c}.pinmsg.err{color:var(--red-d)}
 .done{max-width:560px;margin:30px auto;text-align:center}
 .done .big{font-size:70px}
 .done h1{transform:rotate(1deg)}
@@ -110,8 +112,12 @@ input,textarea{width:100%;padding:10px 12px;border:3px solid var(--ink);border-r
           </div>
           <label for="fa">Address (house no, street, area)</label><textarea id="fa" rows="2" autocomplete="street-address"></textarea>
           <div class="g2">
-            <div><label for="fc">City</label><input id="fc" autocomplete="address-level2"></div>
-            <div><label for="fz">Pincode</label><input id="fz" inputmode="numeric" maxlength="6" autocomplete="postal-code"></div>
+            <div><label for="fz">Pincode</label><input id="fz" inputmode="numeric" maxlength="6" autocomplete="postal-code" placeholder="6-digit pincode"><small id="pinmsg" class="pinmsg" role="status"></small></div>
+            <div><label for="fc">City / Area</label><input id="fc" list="pol" autocomplete="address-level2"><datalist id="pol"></datalist></div>
+          </div>
+          <div class="g2">
+            <div><label for="fd">District</label><input id="fd" autocomplete="address-level3" placeholder="comes from the pincode"></div>
+            <div><label for="fs">State</label><input id="fs" autocomplete="address-level1" placeholder="comes from the pincode"></div>
           </div>
         </div>
         <div class="box">
@@ -259,14 +265,14 @@ $('lines').onclick=e=>{
 
 $('place').onclick=async()=>{
   const name=$('fn').value.trim(),phone=$('fp').value.replace(/[\s+-]/g,'').replace(/^91(?=\d{10}$)/,''),
-        addr=$('fa').value.trim(),city=$('fc').value.trim(),pin=$('fz').value.trim();
+        addr=$('fa').value.trim(),city=$('fc').value.trim(),pin=$('fz').value.trim(),dist=$('fd').value.trim(),st=$('fs').value.trim();
   const bad=!name?'Please enter your name':!/^\d{10}$/.test(phone)?'Please enter a valid 10-digit phone number':
-    addr.length<8?'Please enter your full address':!city?'Please enter your city':!/^\d{6}$/.test(pin)?'Please enter a 6-digit pincode':'';
+    addr.length<8?'Please enter your full address':!/^\d{6}$/.test(pin)?'Please enter a 6-digit pincode':!city?'Please enter your city / area':!dist?'Please enter your district':!st?'Please enter your state':'';
   if(bad){$('err').textContent=bad;return}
   const online=method()==='online';
   $('err').textContent='';$('place').disabled=true;$('place').textContent=online?'Opening payment...':'Placing order...';
   if(!online)showFx('wait');
-  const address=`${addr}, ${city} - ${pin}`;
+  const address=`${addr}, ${city}, ${dist}, ${st} - ${pin}`;
   try{
     const [r]=await Promise.all([fetch('/api/orders',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+tok},
       body:JSON.stringify({name,phone,address,paymentMethod:'online',items:Object.entries(cart).map(([id,qty])=>({id:+id,qty}))})}),online?null:sleep(1400)]);
@@ -287,6 +293,31 @@ $('place').onclick=async()=>{
     scrollTo({top:0,behavior:'smooth'});
   }catch(e){showFx(null);$('err').textContent=e.message;$('place').disabled=false;$('place').textContent=btnLabel()}
 };
+/* Pincode -> district, state and area names (India Post, free service). If it cannot be reached, the fields can be typed by hand. */
+let pinTimer,pinSeq=0,autoCity='';
+async function lookupPin(){
+  const f=$('fz'),m=$('pinmsg'),pin=f.value.replace(/\D/g,'').slice(0,6);
+  f.value=pin;
+  if(pin.length<6){m.textContent='';m.className='pinmsg';return}
+  const seq=++pinSeq;m.textContent='Checking pincode...';m.className='pinmsg';
+  try{
+    const r=await fetch('https://api.postalpincode.in/pincode/'+pin);
+    const d=await r.json();
+    if(seq!==pinSeq)return;
+    const o=d&&d[0],po=o&&o.Status==='Success'&&o.PostOffice;
+    if(!po||!po.length){m.textContent='Pincode not found. Please check it, or type district and state yourself.';m.className='pinmsg err';return}
+    const first=po[0];
+    $('fd').value=first.District||'';$('fs').value=first.State||'';
+    $('pol').innerHTML=po.map(x=>`<option value="${esc(x.Name)}">`).join('');
+    const c=$('fc'),guess=first.Block&&first.Block!=='NA'?first.Block:(first.District||'');
+    if(!c.value.trim()||c.value===autoCity){c.value=guess;autoCity=guess}   // never overwrite something the customer typed
+    m.textContent='✓ '+(first.District||'')+', '+(first.State||'');m.className='pinmsg ok';
+  }catch{
+    if(seq===pinSeq){m.textContent='Could not check the pincode right now. Please type district and state yourself.';m.className='pinmsg err'}
+  }
+}
+$('fz').addEventListener('input',()=>{clearTimeout(pinTimer);pinTimer=setTimeout(lookupPin,250)});
+
 document.querySelectorAll('input[name=pm]').forEach(i=>i.onchange=()=>{$('place').textContent=btnLabel()});
 fetch('/api/payment/config').then(r=>r.json()).then(c=>{
   RZ_KEY=c.razorpayKey;
