@@ -409,6 +409,12 @@ const clean = b => ({
   // stock: null = not tracked (unlimited), otherwise how many are left
   stock: (b.stock === undefined || b.stock === null || b.stock === '') ? null : Math.max(0, Math.floor(Number(b.stock) || 0)),
   soon: b.soon === true || b.soon === 'true',     // "Coming soon": visible but cannot be bought
+  // colors the customer can choose from: [{ n: 'Blue', h: '#4aa3e8' (swatch), i: 0 (which photo to show, optional) }]
+  colors: (Array.isArray(b.colors) ? b.colors : []).map(c => ({
+    n: String((c && c.n) || '').replace(/[|<>]/g, '').trim().slice(0, 30),
+    h: /^#[0-9a-f]{6}$/i.test(String((c && c.h) || '')) ? String(c.h) : '',
+    i: Number.isInteger(Number(c && c.i)) && c && c.i !== '' && c.i !== null && Number(c.i) >= 0 ? Number(c.i) : null
+  })).filter(c => c.n).slice(0, 12),
   nw: b.nw === true || b.nw === 'true',           // always show the NEW badge (new products also get it automatically for 14 days)
   desc: String(b.desc || '').trim().slice(0, 2000)
 });
@@ -758,9 +764,16 @@ app.post('/api/orders', authed, async (req, res) => {
     want[p.id] = (want[p.id] || 0) + qty;
     if (p.stock != null && want[p.id] > p.stock)
       return res.status(400).json({ error: p.stock > 0 ? 'Only ' + p.stock + ' left for ' + p.n + '. Please reduce the quantity.' : p.n + ' is out of stock. Please remove it from your cart.' });
+    // products with colors: the customer must have chosen one of them
+    const cols = Array.isArray(p.colors) ? p.colors : [];
+    let color = '';
+    if (cols.length) {
+      color = String(it.color || '');
+      if (!cols.some(c => c.n === color)) return res.status(400).json({ error: 'Please choose a color for ' + p.n + ' (remove it from the cart and add it again).' });
+    }
     total += p.p * qty;
     if (p.ship !== undefined && p.ship !== null && p.ship !== '') manualShip += Number(p.ship) * qty; else hasDefault = true;
-    lines.push({ id: p.id, name: p.n, price: p.p, qty });
+    lines.push({ id: p.id, name: p.n + (color ? ' (' + color + ')' : ''), price: p.p, qty, color });
   }
   const st = getSettings();
   // products with their own shipping charge: that amount x qty. Others: store default (per order, free above the limit)

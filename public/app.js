@@ -10,13 +10,20 @@ const F={japan:"🇯🇵",korea:"🇰🇷",china:"🇨🇳"};
 let cat="All",sub="All",org="All",cart=JSON.parse(localStorage.getItem("kz_cart")||"{}");
 // ---- product status: NEW badge, coming soon, stock ----
 const isNew=p=>!p.soon&&(!!p.nw||((p.launchedAt||p.createdAt)&&Date.now()-new Date(p.launchedAt||p.createdAt)<14*864e5));
+// ---- colors: one cart line per product + color ("6" = no color, "6|Blue" = Blue) ----
+const kid=k=>String(k).split("|")[0];                                   // product id of a cart line
+const kcol=k=>{const i=String(k).indexOf("|");return i<0?"":String(k).slice(i+1)};
+const ckey=(id,color)=>color?id+"|"+color:String(id);
+const inCart=id=>Object.keys(cart).filter(k=>kid(k)==id).reduce((n,k)=>n+cart[k],0);   // all colors of one product (stock is shared)
+const picC=(p,col)=>{const c=(p.colors||[]).find(x=>x.n===col),u=[p.img,...(p.imgs||[])].filter(Boolean);return c&&c.i!=null&&u[c.i]?`<img src="${esc(u[c.i])}" alt="${esc(p.n)}">`:pic(p)};
+const swatches=p=>(p.colors&&p.colors.length&&!p.soon)?`<div class="sw">${p.colors.slice(0,6).map(c=>`<i style="background:${esc(c.h||"#ccc")}" title="${esc(c.n)}"></i>`).join("")}${p.colors.length>6?`<em>+${p.colors.length-6}</em>`:""}</div>`:"";
 const hasPrice=p=>Number(p.p)>0;   // coming soon products can have no price
 const soldOut=p=>!p.soon&&p.stock!=null&&p.stock<=0;
 const unavailable=p=>!!p.soon||soldOut(p);
 // overlays inside the product picture
 const badges=p=>(p.soon?'<b class="bdg soon-t">COMING SOON</b>':soldOut(p)?'<b class="bdg soon-t out">SOLD OUT</b>':"")+(isNew(p)?'<b class="bdg new">NEW</b>':"");
 const stockLine=p=>p.soon||p.stock==null?"":p.stock<=0?'<div class="stk out">Out of stock</div>':p.stock<=5?`<div class="stk low">🔥 Only ${p.stock} left!</div>`:`<div class="stk">📦 ${p.stock} in stock</div>`;
-const actions=p=>p.soon?`<a class="add pb" href="/product/${p.id}#prebook">🔔 Pre-book</a>`:soldOut(p)?'<button class="add" disabled>Sold out</button>':`<button class="add" data-a="${p.id}">Add to cart</button><button class="add buy" data-b="${p.id}">Buy now</button>`;
+const actions=p=>p.soon?`<a class="add pb" href="/product/${p.id}#prebook">🔔 Pre-book</a>`:soldOut(p)?'<button class="add" disabled>Sold out</button>':(p.colors&&p.colors.length)?`<a class="add buy" href="/product/${p.id}">🎨 Choose color</a>`:`<button class="add" data-a="${p.id}">Add to cart</button><button class="add buy" data-b="${p.id}">Buy now</button>`;
 let sq=""; // search text that is actually applied (only changes on Search button / Enter / suggestion click)
 const $=id=>document.getElementById(id);
 let page=1,PER=15;
@@ -36,7 +43,7 @@ function nav(){
   sb.innerHTML=["All",...subs].map(s=>`<button class="${s==sub?'on':''}" data-s="${esc(s)}">${esc(s)}</button>`).join("");
   $("chips").innerHTML=ORG.map(o=>`<button class="${o==org?'on':''}" data-o="${o}">${F[o.toLowerCase()]||"🌏"} ${o}</button>`).join("");
 }
-const cardHTML=p=>`<article class="card${p.soon?" soon":soldOut(p)?" sold":""}" data-href="/product/${p.id}"><a class="pic" href="/product/${p.id}" aria-label="View ${esc(p.n)}"><i>${F[p.o.toLowerCase()]} ${p.o}</i>${pic(p)}${badges(p)}</a><div class="info"><h3><a href="/product/${p.id}">${esc(p.n)}</a></h3><small>${p.c}${p.sub?" · "+p.sub:""}</small>${stockLine(p)}${hasPrice(p)?`<div class="pr">${inr(p.p)}<s>${inr(p.m)}</s><em>${Math.round((1-p.p/p.m)*100)}% off</em></div>`:""}${actions(p)}</div></article>`;
+const cardHTML=p=>`<article class="card${p.soon?" soon":soldOut(p)?" sold":""}" data-href="/product/${p.id}"><a class="pic" href="/product/${p.id}" aria-label="View ${esc(p.n)}"><i>${F[p.o.toLowerCase()]} ${p.o}</i>${pic(p)}${badges(p)}</a><div class="info"><h3><a href="/product/${p.id}">${esc(p.n)}</a></h3><small>${p.c}${p.sub?" · "+p.sub:""}</small>${swatches(p)}${stockLine(p)}${hasPrice(p)?`<div class="pr">${inr(p.p)}<s>${inr(p.m)}</s><em>${Math.round((1-p.p/p.m)*100)}% off</em></div>`:""}${actions(p)}</div></article>`;
 // "New arrivals" and "Coming soon" shelves above the main product list (home page, no filter / search active)
 function shelves(){
   const sh=$("shop");if(!sh)return;
@@ -83,11 +90,16 @@ function pager(pages,total){
 }
 function drawCart(){
   if(!P.length&&Object.keys(cart).length)return;
-  Object.keys(cart).forEach(id=>{const p=G(id);if(!p||p.soon)delete cart[id];else if(p.stock!=null){if(p.stock<=0)delete cart[id];else if(cart[id]>p.stock)cart[id]=p.stock}});
+  const used={};
+  Object.keys(cart).forEach(k=>{
+    const p=G(kid(k)),col=kcol(k);
+    if(!p||p.soon||((p.colors||[]).length?!p.colors.some(c=>c.n===col):!!col)){delete cart[k];return}   // gone, coming soon, or its color was removed
+    if(p.stock!=null){const left=p.stock-(used[p.id]||0);if(left<=0){delete cart[k];return}if(cart[k]>left)cart[k]=left;used[p.id]=(used[p.id]||0)+cart[k]}
+  });
   localStorage.setItem("kz_cart",JSON.stringify(cart));
   const ids=Object.keys(cart);let t=0,n=0;
-  $("items").innerHTML=ids.length?ids.map(id=>{const p=G(id),q=cart[id];t+=p.p*q;n+=q;return `<div class="row"><div class="e">${pic(p)}</div><div><b>${p.n}</b><div>${inr(p.p)}</div><div class="qty"><button data-d="-1" data-i="${id}" aria-label="Decrease">−</button>${q}<button data-d="1" data-i="${id}" aria-label="Increase">+</button></div></div></div>`}).join(""):`<div class="empty">Your cart is empty. Add something you like.</div>`;
-  const sc=shipCalc(ids.map(id=>[G(id),cart[id]])),ship=t?sc.amt:0;$("ship").textContent=t?(ship?"Shipping "+inr(ship)+(S.freeAbove&&sc.hasDef?" (free above "+inr(S.freeAbove)+")":""):"Free shipping"):"";$("tot").textContent=inr(t+ship);$("cc").textContent=n;
+  $("items").innerHTML=ids.length?ids.map(k=>{const p=G(kid(k)),col=kcol(k),q=cart[k];t+=p.p*q;n+=q;return `<div class="row"><div class="e">${picC(p,col)}</div><div><b>${p.n}</b>${col?`<small class="cl">Color: ${esc(col)}</small>`:""}<div>${inr(p.p)}</div><div class="qty"><button data-d="-1" data-i="${esc(k)}" aria-label="Decrease">−</button>${q}<button data-d="1" data-i="${esc(k)}" aria-label="Increase">+</button></div></div></div>`}).join(""):`<div class="empty">Your cart is empty. Add something you like.</div>`;
+  const sc=shipCalc(ids.map(k=>[G(kid(k)),cart[k]])),ship=t?sc.amt:0;$("ship").textContent=t?(ship?"Shipping "+inr(ship)+(S.freeAbove&&sc.hasDef?" (free above "+inr(S.freeAbove)+")":""):"Free shipping"):"";$("tot").textContent=inr(t+ship);$("cc").textContent=n;
 }
 function toast(m){const t=$("toast");t.textContent=m;t.classList.add("show");clearTimeout(toast.x);toast.x=setTimeout(()=>t.classList.remove("show"),1600)}
 function open(v){$("dr").classList.toggle("open",v);$("veil").classList.toggle("open",v)}
@@ -166,14 +178,16 @@ document.addEventListener("click",e=>{
   if(b.dataset.pg&&!b.disabled){page=+b.dataset.pg;render();$("shop").scrollIntoView({behavior:"smooth"});return}
   if(b.dataset.b){const id=b.dataset.b,p=G(id),q=(cart[id]||0)+1;
     if(!p||unavailable(p)){toast(p&&p.soon?"Coming soon":"Out of stock");return}
-    if(p.stock!=null&&q>p.stock){if(!cart[id]){toast("Out of stock");return}}else cart[id]=q;
+    if((p.colors||[]).length){location.href="/product/"+id;return}
+    if(p.stock!=null&&inCart(id)+1>p.stock){if(!cart[id]){toast("Out of stock");return}}else cart[id]=q;
     drawCart();$("co").click();return}
   if(b.dataset.a){const id=b.dataset.a,p=G(id),q=(cart[id]||0)+1;
     if(!p||unavailable(p)){toast(p&&p.soon?"Coming soon":"Out of stock");return}
-    if(p.stock!=null&&q>p.stock){toast("Only "+p.stock+" available");return}
+    if((p.colors||[]).length){location.href="/product/"+id;return}
+    if(p.stock!=null&&inCart(id)+1>p.stock){toast("Only "+p.stock+" available");return}
     cart[id]=q;drawCart();toast("Added to cart")}
-  if(b.dataset.d){const i=b.dataset.i,p=G(i),q=cart[i]+ +b.dataset.d;
-    if(+b.dataset.d>0&&p&&p.stock!=null&&q>p.stock){toast("Only "+p.stock+" available");return}
+  if(b.dataset.d){const i=b.dataset.i,p=G(kid(i)),q=cart[i]+ +b.dataset.d;
+    if(+b.dataset.d>0&&p&&p.stock!=null&&inCart(p.id)+1>p.stock){toast("Only "+p.stock+" available");return}
     cart[i]=q;if(cart[i]<1)delete cart[i];drawCart()}
 });
 $("cb").onclick=()=>open(true);$("cx").onclick=()=>open(false);$("veil").onclick=()=>open(false);

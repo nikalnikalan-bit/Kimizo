@@ -200,9 +200,13 @@ if(!tok){location.href='/login?next=/checkout'}
 let P=[],S={shippingFee:0,freeAbove:0},cart=JSON.parse(localStorage.getItem('kz_cart')||'{}');
 const G=id=>P.find(p=>p.id==id);
 const pic=p=>p.img?`<img src="${esc(p.img)}" alt="">`:esc(p.e);
+// cart line key: "6" = no color, "6|Blue" = color Blue
+const kid=k=>String(k).split('|')[0];
+const kcol=k=>{const i=String(k).indexOf('|');return i<0?'':String(k).slice(i+1)};
+const picC=(p,col)=>{const c=(p.colors||[]).find(x=>x.n===col),u=[p.img,...(p.imgs||[])].filter(Boolean);return c&&c.i!=null&&u[c.i]?`<img src="${esc(u[c.i])}" alt="">`:pic(p)};
 const save=()=>localStorage.setItem('kz_cart',JSON.stringify(cart));
 // products with their own shipping charge pay that x qty; others use the store default (free above the limit)
-const shipCalc=()=>{let sub=0,manual=0,hasDef=false;Object.keys(cart).forEach(id=>{const p=G(id),q=cart[id];if(!p)return;sub+=p.p*q;if(p.ship!=null&&p.ship!=='')manual+=Number(p.ship)*q;else hasDef=true});
+const shipCalc=()=>{let sub=0,manual=0,hasDef=false;Object.keys(cart).forEach(id=>{const p=G(kid(id)),q=cart[id];if(!p)return;sub+=p.p*q;if(p.ship!=null&&p.ship!=='')manual+=Number(p.ship)*q;else hasDef=true});
   const def=hasDef&&sub>0&&!(S.freeAbove>0&&sub>=S.freeAbove)?S.shippingFee:0;return{sub,hasDef,amt:manual+def}};
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 function chime(){try{const c=new(window.AudioContext||window.webkitAudioContext)();[[880,0],[1318,.12],[1760,.24]].forEach(([f,t])=>{const o=c.createOscillator(),g=c.createGain(),s=c.currentTime+t;o.type='sine';o.frequency.value=f;g.gain.setValueAtTime(.0001,s);g.gain.exponentialRampToValueAtTime(.25,s+.02);g.gain.exponentialRampToValueAtTime(.0001,s+.35);o.connect(g);g.connect(c.destination);o.start(s);o.stop(s+.4)})}catch(e){}}
@@ -241,14 +245,14 @@ function payOnline(d,name,phone){
   });
 }
 function draw(){
-  Object.keys(cart).forEach(id=>{if(!G(id))delete cart[id]});save();
+  Object.keys(cart).forEach(k=>{const p=G(kid(k)),col=kcol(k);if(!p||((p.colors||[]).length?!p.colors.some(c=>c.n===col):!!col))delete cart[k]});save();
   const ids=Object.keys(cart);
   $('review').hidden=!ids.length;$('empty').hidden=!!ids.length;
   if(!ids.length)return;
   let sub=0,n=0;
-  $('lines').innerHTML=ids.map(id=>{const p=G(id),q=cart[id];sub+=p.p*q;n+=q;
-    return `<div class="ln"><div class="e">${pic(p)}</div><div class="m"><b>${esc(p.n)}</b><small>${esc(p.c)} · ${esc(p.o)}</small><div>${inr(p.p)}</div>
-    <div class="qty"><button data-d="-1" data-i="${id}" aria-label="Decrease">−</button><span>${q}</span><button data-d="1" data-i="${id}" aria-label="Increase">+</button><button class="rm" data-rm="${id}">Remove</button></div></div>
+  $('lines').innerHTML=ids.map(id=>{const p=G(kid(id)),col=kcol(id),q=cart[id];sub+=p.p*q;n+=q;
+    return `<div class="ln"><div class="e">${picC(p,col)}</div><div class="m"><b>${esc(p.n)}</b>${col?`<small><b style="display:inline">Color: ${esc(col)}</b></small>`:''}<small>${esc(p.c)} · ${esc(p.o)}</small><div>${inr(p.p)}</div>
+    <div class="qty"><button data-d="-1" data-i="${esc(id)}" aria-label="Decrease">−</button><span>${q}</span><button data-d="1" data-i="${esc(id)}" aria-label="Increase">+</button><button class="rm" data-rm="${esc(id)}">Remove</button></div></div>
     <div class="t">${inr(p.p*q)}</div></div>`}).join('');
   const sc=shipCalc(),ship=sc.amt;
   $('cnt').textContent=n;$('sub').textContent=inr(sub);
@@ -275,7 +279,7 @@ $('place').onclick=async()=>{
   const address=`${addr}, ${city}, ${dist}, ${st} - ${pin}`;
   try{
     const [r]=await Promise.all([fetch('/api/orders',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+tok},
-      body:JSON.stringify({name,phone,address,paymentMethod:'online',items:Object.entries(cart).map(([id,qty])=>({id:+id,qty}))})}),online?null:sleep(1400)]);
+      body:JSON.stringify({name,phone,address,paymentMethod:'online',items:Object.entries(cart).map(([k,qty])=>({id:+kid(k),qty,color:kcol(k)}))})}),online?null:sleep(1400)]);
     let d=await r.json();
     if(r.status===401){localStorage.removeItem('kz_token');localStorage.removeItem('kz_user');location.href='/login?next=/checkout';return}
     if(!r.ok)throw new Error(d.error||'Order failed');

@@ -655,3 +655,24 @@ footer .copy{
   color:rgba(246,231,193,.65)
 }
 @media(max-width:700px){footer .copy{font-size:11px;margin-top:18px}}
+/* ======== Product colors (paste at the END of style.css) ======== */
+
+/* color chooser on the product page */
+.pd-colors{margin:10px 0 4px;padding:12px 14px;background:var(--cream);border:3px solid var(--ink);border-radius:12px}
+.pd-ct{font-size:14px;margin-bottom:8px}
+.pd-ct b{font-weight:700}
+.pd-cw{display:flex;flex-wrap:wrap;gap:10px}
+.cc{display:flex;align-items:center;gap:8px;padding:5px 14px 5px 6px;font:inherit;font-weight:700;font-size:14px;color:var(--ink);background:#fff;border:3px solid var(--ink);border-radius:99px;cursor:pointer;transition:transform .1s,box-shadow .1s}
+.cc i{width:24px;height:24px;border:2px solid var(--ink);border-radius:50%;display:block}
+.cc:hover{transform:translate(-1px,-1px);box-shadow:3px 3px 0 var(--ink)}
+.cc.on{background:var(--yellow);box-shadow:3px 3px 0 var(--ink);outline:3px solid var(--red);outline-offset:2px}
+.pd-colors.shake{animation:shk .4s}
+@keyframes shk{20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}
+
+/* little color dots on product cards */
+.sw{display:flex;align-items:center;gap:4px;margin:2px 0}
+.sw i{width:14px;height:14px;border:2px solid var(--ink);border-radius:50%;display:block}
+.sw em{font-style:normal;font-size:11px;font-weight:700;color:var(--mute)}
+
+/* color name in the cart */
+.row small.cl{display:block;color:var(--mute);font-size:12px}

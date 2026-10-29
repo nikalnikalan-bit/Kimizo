@@ -20,6 +20,8 @@
     document.title = p.n + ' – ' + (st.storeName || 'Kimizo');
     const off = p.m > p.p ? Math.round((1 - p.p / p.m) * 100) : 0;
     const flag = F[String(p.o).toLowerCase()] || '🌏';
+    const hasCol = !!(p.colors && p.colors.length && !p.soon);
+    let col = hasCol && p.colors.length === 1 ? p.colors[0].n : '';   // the chosen color (a single color is chosen automatically)
     const unav = unavailable(p), maxQ = p.stock != null ? Math.max(1, Math.min(20, p.stock)) : 20;
     const gal = [p.img, ...(Array.isArray(p.imgs) ? p.imgs : [])].filter(Boolean).filter((u, i, a) => a.indexOf(u) === i);
     const desc = p.desc || `${p.n} from ${p.o}, part of our ${p.sub || p.c} range. Carefully selected for quality and value, and delivered across India.`;
@@ -40,6 +42,7 @@
         ${hasPrice(p) ? `<div class="pd-price"><b>${inr(p.p)}</b>${off ? `<s>${inr(p.m)}</s><em>${off}% off</em>` : ''}</div>` : ''}
         ${off ? `<p class="pd-save">You save ${inr(p.m - p.p)}</p>` : '<p class="pd-save"></p>'}
         ${stockLine(p)}
+        ${hasCol ? `<div class="pd-colors" id="pdcol"><div class="pd-ct">🎨 Color: <b id="pdcn">${p.colors.length > 1 ? 'choose one' : esc(p.colors[0].n)}</b></div><div class="pd-cw">${p.colors.map((c, i) => `<button type="button" class="cc" data-ci="${i}" aria-label="${esc(c.n)}" aria-pressed="false"><i style="background:${esc(c.h || '#ccc')}"></i><span>${esc(c.n)}</span></button>`).join('')}</div></div>` : ''}
         <h2>About this product</h2>
         <p class="pd-desc">${esc(desc)}</p>
         <h2>Product details</h2>
@@ -65,12 +68,14 @@
 
     if (!unav) {
       const q = () => { $('pdq').textContent = qty; };
-      const have = () => cart[p.id] || 0;
-      const room = () => p.stock != null ? p.stock - have() : 99;   // how many more can still be added
+      const key = () => ckey(p.id, col);
+      const have = () => cart[key()] || 0;
+      const room = () => p.stock != null ? p.stock - inCart(p.id) : 99;   // how many more can still be added (all colors share the stock)
+      const needCol = () => { if (hasCol && !col) { toast('Please choose a color first'); const w = $('pdcol'); if (w) { w.classList.remove('shake'); void w.offsetWidth; w.classList.add('shake'); w.scrollIntoView({ block: 'center', behavior: 'smooth' }); } return true; } return false; };
       $('pdm').onclick = () => { qty = Math.max(1, qty - 1); q(); };
       $('pdp').onclick = () => { if (qty >= maxQ) { toast('Only ' + p.stock + ' available'); return; } qty = Math.min(maxQ, qty + 1); q(); };
-      $('pda').onclick = () => { if (qty > room()) { toast(room() > 0 ? 'Only ' + room() + ' more available' : 'You already have all available pieces in your cart'); return; } cart[p.id] = have() + qty; drawCart(); toast(qty > 1 ? qty + ' items added to cart' : 'Added to cart'); };
-      $('pdbuy').onclick = () => { if (qty <= room()) cart[p.id] = have() + qty; else if (!have()) { toast('Out of stock'); return; } drawCart(); $('co').click(); };
+      $('pda').onclick = () => { if (needCol()) return; if (qty > room()) { toast(room() > 0 ? 'Only ' + room() + ' more available' : 'You already have all available pieces in your cart'); return; } cart[key()] = have() + qty; drawCart(); toast(qty > 1 ? qty + ' items added to cart' : 'Added to cart'); };
+      $('pdbuy').onclick = () => { if (needCol()) return; if (qty <= room()) cart[key()] = have() + qty; else if (!have()) { toast('Out of stock'); return; } drawCart(); $('co').click(); };
     }
 
     // photo gallery: thumbnails, arrows, swipe, tap to open full picture
@@ -93,6 +98,19 @@
       const th = document.querySelector('.pd-thumbs');
       if (th) th.onclick = e => { const b = e.target.closest('button[data-th]'); if (b) setG(+b.dataset.th); };
     }
+
+    // color chips: choosing a color also shows its photo
+    if (hasCol) {
+      const w = $('pdcol');
+      w.onclick = e => {
+        const b = e.target.closest('button.cc'); if (!b) return;
+        const c = p.colors[+b.dataset.ci]; col = c.n;
+        w.querySelectorAll('.cc').forEach(x => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-pressed', on); });
+        $('pdcn').textContent = c.n;
+        if (c.i != null && gal[c.i]) setG(c.i);
+      };
+      if (col) { const f1 = w.querySelector('.cc'); if (f1) { f1.classList.add('on'); f1.setAttribute('aria-pressed', 'true'); } }
+    }
   }
 
   function related(p) {
@@ -100,7 +118,7 @@
       const l = list.filter(x => x.id !== p.id).sort((a, b) => (b.sub === p.sub) - (a.sub === p.sub)).slice(0, 4);
       if (!l.length) return;
       rel.innerHTML = `<h2 class="pd-rel">More in ${esc(p.c)}</h2><div class="grid">${l.map(x =>
-        `<article class="card${x.soon ? ' soon' : soldOut(x) ? ' sold' : ''}" data-href="/product/${x.id}"><a class="pic" href="/product/${x.id}" aria-label="View ${esc(x.n)}"><i>${F[String(x.o).toLowerCase()] || '🌏'} ${esc(x.o)}</i>${pic(x)}${badges(x)}</a><div class="info"><h3><a href="/product/${x.id}">${esc(x.n)}</a></h3><small>${esc(x.c)}${x.sub ? ' · ' + esc(x.sub) : ''}</small>${hasPrice(x) ? `<div class="pr">${inr(x.p)}<s>${inr(x.m)}</s>${x.m > x.p ? `<em>${Math.round((1 - x.p / x.m) * 100)}% off</em>` : ''}</div>` : ''}${stockLine(x)}${x.soon ? `<a class="add pb" href="/product/${x.id}#prebook">🔔 Pre-book</a>` : unavailable(x) ? `<button class="add" disabled>Sold out</button>` : `<button class="add" data-a="${x.id}">Add to cart</button>`}</div></article>`).join('')}</div>`;
+        `<article class="card${x.soon ? ' soon' : soldOut(x) ? ' sold' : ''}" data-href="/product/${x.id}"><a class="pic" href="/product/${x.id}" aria-label="View ${esc(x.n)}"><i>${F[String(x.o).toLowerCase()] || '🌏'} ${esc(x.o)}</i>${pic(x)}${badges(x)}</a><div class="info"><h3><a href="/product/${x.id}">${esc(x.n)}</a></h3><small>${esc(x.c)}${x.sub ? ' · ' + esc(x.sub) : ''}</small>${hasPrice(x) ? `<div class="pr">${inr(x.p)}<s>${inr(x.m)}</s>${x.m > x.p ? `<em>${Math.round((1 - x.p / x.m) * 100)}% off</em>` : ''}</div>` : ''}${swatches(x)}${stockLine(x)}${x.soon ? `<a class="add pb" href="/product/${x.id}#prebook">🔔 Pre-book</a>` : unavailable(x) ? `<button class="add" disabled>Sold out</button>` : (x.colors && x.colors.length) ? `<a class="add buy" href="/product/${x.id}">🎨 Choose color</a>` : `<button class="add" data-a="${x.id}">Add to cart</button>`}</div></article>`).join('')}</div>`;
     }).catch(() => {});
   }
 
