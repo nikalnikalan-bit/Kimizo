@@ -240,7 +240,16 @@ function applySettings(){
   document.querySelectorAll(".logo-img img").forEach(i=>i.alt=S.storeName);
   const hh=document.querySelector(".hero h1"),hp=document.querySelector(".hero p");
   if(hh)hh.textContent=S.heroTitle;if(hp)hp.textContent=S.heroText;
-  document.querySelector("footer").innerHTML=`<span class="logo" style="color:#fff">${esc(S.storeName)}</span><br>${esc(S.tagline)}${S.phone?" · 📞 "+esc(S.phone):""}${S.email?" · "+esc(S.email):""}<div class="copy">© ${new Date().getFullYear()} KIMIZO. ALL RIGHTS RESERVED.</div>`;
+  // the footer text (logo, tagline, copyright) now comes only from the html pages. Here only the phone / e-mail line is added.
+  const ft=document.querySelector("footer");
+  if(ft){
+    let fc=ft.querySelector(".fcontact");
+    const info=[S.phone?"📞 "+esc(S.phone):"",S.email?esc(S.email):""].filter(Boolean).join(" · ");
+    if(info){
+      if(!fc){fc=document.createElement("div");fc.className="fcontact";fc.style.marginTop="6px";const cp=ft.querySelector(".copy");cp?ft.insertBefore(fc,cp):ft.appendChild(fc)}
+      fc.innerHTML=info;
+    }else if(fc)fc.remove();
+  }
   let a=document.querySelector(".announce");
   if(S.announcement){if(!a){a=document.createElement("div");a.className="announce";document.body.prepend(a)}a.textContent=S.announcement}else if(a)a.remove();
 }
