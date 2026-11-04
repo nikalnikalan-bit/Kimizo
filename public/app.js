@@ -3,7 +3,9 @@ let P=[],S={shippingFee:0,freeAbove:0};
 function shipCalc(lines){let sub=0,manual=0,hasDef=false;lines.forEach(([p,q])=>{sub+=p.p*q;if(p.ship!=null&&p.ship!=="")manual+=Number(p.ship)*q;else hasDef=true});
   const def=hasDef&&sub>0&&!(S.freeAbove>0&&sub>=S.freeAbove)?S.shippingFee:0;return{amt:manual+def,hasDef,sub}}
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const pic=p=>p.img?`<img src="${esc(p.img)}" alt="${esc(p.n)}">`:`<span class="emo">${p.e}</span>`;
+const BOOT=window.__KZ||null;   // the home page arrives with its products and settings inside (see server.js)
+const thumb=(u,w)=>u&&String(u).startsWith("/api/img/")?u+"?w="+w:u;   // small copy of one of our own pictures
+const pic=(p,w)=>p.img?`<img src="${esc(w?thumb(p.img,w):p.img)}" alt="${esc(p.n)}" loading="lazy" decoding="async">`:`<span class="emo">${p.e}</span>`;
 const G=id=>P.find(p=>p.id==id);
 const ORG=["All","Japan","Korea","China"];
 const F={japan:"🇯🇵",korea:"🇰🇷",china:"🇨🇳"};
@@ -15,7 +17,7 @@ const kid=k=>String(k).split("|")[0];                                   // produ
 const kcol=k=>{const i=String(k).indexOf("|");return i<0?"":String(k).slice(i+1)};
 const ckey=(id,color)=>color?id+"|"+color:String(id);
 const inCart=id=>Object.keys(cart).filter(k=>kid(k)==id).reduce((n,k)=>n+cart[k],0);   // all colors of one product (stock is shared)
-const picC=(p,col)=>{const c=(p.colors||[]).find(x=>x.n===col),u=[p.img,...(p.imgs||[])].filter(Boolean);return c&&c.i!=null&&u[c.i]?`<img src="${esc(u[c.i])}" alt="${esc(p.n)}">`:pic(p)};
+const picC=(p,col)=>{const c=(p.colors||[]).find(x=>x.n===col),u=[p.img,...(p.imgs||[])].filter(Boolean);return c&&c.i!=null&&u[c.i]?`<img src="${esc(thumb(u[c.i],160))}" alt="${esc(p.n)}" loading="lazy" decoding="async">`:pic(p,160)};
 const swatches=p=>(p.colors&&p.colors.length&&!p.soon)?`<div class="sw">${p.colors.slice(0,6).map(c=>`<i style="background:${esc(c.h||"#ccc")}" title="${esc(c.n)}"></i>`).join("")}${p.colors.length>6?`<em>+${p.colors.length-6}</em>`:""}</div>`:"";
 const hasPrice=p=>Number(p.p)>0;   // coming soon products can have no price
 const soldOut=p=>!p.soon&&p.stock!=null&&p.stock<=0;
@@ -29,8 +31,9 @@ const $=id=>document.getElementById(id);
 let page=1,PER=15;
 // products per page = full rows only (columns x rows), so every row is even on desktop and mobile
 function calcPer(){
-  const g=$("grid");if(!g)return 15;
-  const cols=window.innerWidth<=700?2:Math.max(1,Math.floor((g.clientWidth+22)/232)); // 210px min card + 22px gap
+  if(!$("grid"))return 15;
+  // from the window width only (reading the grid's own size would force the browser to lay the page out again)
+  const cols=window.innerWidth<=700?2:Math.max(1,Math.floor((window.innerWidth*0.92-15+22)/232)); // grid = 92vw, 210px min card + 22px gap
   return cols*Math.max(1,Math.round(15/cols));
 }
 const inr=n=>"₹"+n.toLocaleString("en-IN");
@@ -43,7 +46,7 @@ function nav(){
   sb.innerHTML=["All",...subs].map(s=>`<button class="${s==sub?'on':''}" data-s="${esc(s)}">${esc(s)}</button>`).join("");
   $("chips").innerHTML=ORG.map(o=>`<button class="${o==org?'on':''}" data-o="${o}">${F[o.toLowerCase()]||"🌏"} ${o}</button>`).join("");
 }
-const cardHTML=p=>`<article class="card${p.soon?" soon":soldOut(p)?" sold":""}" data-href="/product/${p.id}"><a class="pic" href="/product/${p.id}" aria-label="View ${esc(p.n)}"><i>${F[p.o.toLowerCase()]} ${p.o}</i>${pic(p)}${badges(p)}</a><div class="info"><h3><a href="/product/${p.id}">${esc(p.n)}</a></h3><small>${p.c}${p.sub?" · "+p.sub:""}</small>${swatches(p)}${stockLine(p)}${hasPrice(p)?`<div class="pr">${inr(p.p)}<s>${inr(p.m)}</s><em>${Math.round((1-p.p/p.m)*100)}% off</em></div>`:""}${actions(p)}</div></article>`;
+const cardHTML=p=>`<article class="card${p.soon?" soon":soldOut(p)?" sold":""}" data-href="/product/${p.id}"><a class="pic" href="/product/${p.id}" aria-label="View ${esc(p.n)}"><i>${F[p.o.toLowerCase()]} ${p.o}</i>${pic(p,480)}${badges(p)}</a><div class="info"><h3><a href="/product/${p.id}">${esc(p.n)}</a></h3><small>${p.c}${p.sub?" · "+p.sub:""}</small>${swatches(p)}${stockLine(p)}${hasPrice(p)?`<div class="pr">${inr(p.p)}<s>${inr(p.m)}</s><em>${Math.round((1-p.p/p.m)*100)}% off</em></div>`:""}${actions(p)}</div></article>`;
 // "New arrivals" and "Coming soon" shelves above the main product list (home page, no filter / search active)
 function shelves(){
   const sh=$("shop");if(!sh)return;
@@ -116,7 +119,7 @@ async function drawRecent(el,exclude){
   if(!list.length){try{list=await fetch("/api/products").then(r=>r.json())}catch{return}}
   const l=ids.map(id=>list.find(p=>p.id==id)).filter(Boolean).slice(0,8);
   if(!l.length){el.innerHTML="";return}
-  el.innerHTML=`<div class="rc-head"><h2 class="rc-t">Recently viewed</h2><button type="button" class="rc-clear" data-rclear>Clear</button></div><div class="rc-row">${l.map(p=>`<a class="rc-card" href="/product/${p.id}"><span class="rc-pic">${p.img?`<img src="${esc(p.img)}" alt="" loading="lazy">`:esc(p.e)}</span><b>${esc(p.n)}</b><span class="rc-p">${hasPrice(p)?inr(p.p)+(p.m>p.p?`<s>${inr(p.m)}</s>`:""):""}</span></a>`).join("")}</div>`;
+  el.innerHTML=`<div class="rc-head"><h2 class="rc-t">Recently viewed</h2><button type="button" class="rc-clear" data-rclear>Clear</button></div><div class="rc-row">${l.map(p=>`<a class="rc-card" href="/product/${p.id}"><span class="rc-pic">${p.img?`<img src="${esc(thumb(p.img,320))}" alt="" loading="lazy" decoding="async">`:esc(p.e)}</span><b>${esc(p.n)}</b><span class="rc-p">${hasPrice(p)?inr(p.p)+(p.m>p.p?`<s>${inr(p.m)}</s>`:""):""}</span></a>`).join("")}</div>`;
 }
 function homeRecent(){
   if(!$("pager"))return;
@@ -135,7 +138,7 @@ function suggest(){
   const m=P.filter(p=>(p.n+" "+p.c+" "+(p.sub||"")).toLowerCase().includes(v)).slice(0,6);
   sgI=-1;
   sg.innerHTML=m.length
-    ?m.map(p=>`<button type="button" role="option" data-sg="${esc(p.n)}"><span class="sg-t">${p.img?`<img src="${esc(p.img)}" alt="">`:esc(p.e)}</span><span class="sg-x"><b>${esc(p.n)}</b><small>${esc(p.c)}${p.sub?" · "+esc(p.sub):""}</small></span></button>`).join("")
+    ?m.map(p=>`<button type="button" role="option" data-sg="${esc(p.n)}"><span class="sg-t">${p.img?`<img src="${esc(thumb(p.img,96))}" alt="">`:esc(p.e)}</span><span class="sg-x"><b>${esc(p.n)}</b><small>${esc(p.c)}${p.sub?" · "+esc(p.sub):""}</small></span></button>`).join("")
     :`<div class="sg-none">No matching products</div>`;
   sg.hidden=false;
 }
@@ -232,7 +235,7 @@ $("co").onclick=()=>{
   location.href="/checkout";
 };
 const qp=new URLSearchParams(location.search).get("q");if(qp&&$("grid")){$("q").value=qp;sq=qp}
-fetch("/api/products").then(r=>r.json()).then(d=>{P=d;render();drawCart();homeRecent()}).catch(()=>{$("grid").innerHTML='<div class="empty">Could not load products. Is the server running?</div>'});
+(BOOT&&BOOT.p?Promise.resolve(BOOT.p):fetch("/api/products").then(r=>r.json())).then(d=>{P=d;render();drawCart();homeRecent()}).catch(()=>{$("grid").innerHTML='<div class="empty">Could not load products. Is the server running?</div>'});
 
 function applySettings(){
   document.title=S.storeName+" – "+S.tagline;
@@ -253,7 +256,7 @@ function applySettings(){
   let a=document.querySelector(".announce");
   if(S.announcement){if(!a){a=document.createElement("div");a.className="announce";document.body.prepend(a)}a.textContent=S.announcement}else if(a)a.remove();
 }
-fetch("/api/settings").then(r=>r.json()).then(s=>{S=s;applySettings();drawCart()}).catch(()=>{});
+(BOOT&&BOOT.s?Promise.resolve(BOOT.s):fetch("/api/settings").then(r=>r.json())).then(s=>{S=s;applySettings();drawCart()}).catch(()=>{});
 
 const U=JSON.parse(localStorage.getItem("kz_user")||"null");
 /* ---------- Account menu (avatar + dropdown) ---------- */

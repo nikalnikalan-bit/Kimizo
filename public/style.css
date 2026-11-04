@@ -676,3 +676,8 @@ footer .copy{
 
 /* color name in the cart */
 .row small.cl{display:block;color:var(--mute);font-size:12px}
+/* ======== Speed: keep the page from jumping while it loads (paste at the END of style.css) ======== */
+.grid:empty{min-height:70vh}          /* product list: space is kept until the products appear */
+.shelf:empty,.rc:empty{display:none}
+img{height:auto}                       /* images never stretch while loading */
+.pic img,.pd-pic img,.rc-pic img,.hr-pi img,.sg-t img,.row .e img{height:100%}

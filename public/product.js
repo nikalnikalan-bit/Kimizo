@@ -34,7 +34,7 @@
     <div class="pd" style="--c:${COLORS[p.id % 5]}">
       <div class="pd-gal">
         <div class="pd-pic" id="pdpic"><i>${flag} ${esc(p.o)}</i>${gal.length ? `<img id="pdmain" src="${esc(gal[0])}" alt="${esc(p.n)}">` : pic(p)}${badges(p)}${gal.length > 1 ? '<button type="button" class="pg-p" aria-label="Previous photo">‹</button><button type="button" class="pg-n" aria-label="Next photo">›</button>' : ''}${gal.length ? '<span class="pd-hint">🔍 Tap to zoom</span>' : ''}</div>
-        ${gal.length > 1 ? `<div class="pd-thumbs">${gal.map((u, i) => `<button type="button" data-th="${i}" class="${i ? '' : 'on'}" aria-label="Photo ${i + 1}"><img src="${esc(u)}" alt=""></button>`).join('')}</div>` : ''}
+        ${gal.length > 1 ? `<div class="pd-thumbs">${gal.map((u, i) => `<button type="button" data-th="${i}" class="${i ? '' : 'on'}" aria-label="Photo ${i + 1}"><img src="${esc(thumb(u, 160))}" alt="" loading="lazy"></button>`).join('')}</div>` : ''}
       </div>
       <div class="pd-box">
         <h1>${esc(p.n)}</h1>
@@ -118,7 +118,7 @@
       const l = list.filter(x => x.id !== p.id).sort((a, b) => (b.sub === p.sub) - (a.sub === p.sub)).slice(0, 4);
       if (!l.length) return;
       rel.innerHTML = `<h2 class="pd-rel">More in ${esc(p.c)}</h2><div class="grid">${l.map(x =>
-        `<article class="card${x.soon ? ' soon' : soldOut(x) ? ' sold' : ''}" data-href="/product/${x.id}"><a class="pic" href="/product/${x.id}" aria-label="View ${esc(x.n)}"><i>${F[String(x.o).toLowerCase()] || '🌏'} ${esc(x.o)}</i>${pic(x)}${badges(x)}</a><div class="info"><h3><a href="/product/${x.id}">${esc(x.n)}</a></h3><small>${esc(x.c)}${x.sub ? ' · ' + esc(x.sub) : ''}</small>${hasPrice(x) ? `<div class="pr">${inr(x.p)}<s>${inr(x.m)}</s>${x.m > x.p ? `<em>${Math.round((1 - x.p / x.m) * 100)}% off</em>` : ''}</div>` : ''}${swatches(x)}${stockLine(x)}${x.soon ? `<a class="add pb" href="/product/${x.id}#prebook">🔔 Pre-book</a>` : unavailable(x) ? `<button class="add" disabled>Sold out</button>` : (x.colors && x.colors.length) ? `<a class="add buy" href="/product/${x.id}">🎨 Choose color</a>` : `<button class="add" data-a="${x.id}">Add to cart</button>`}</div></article>`).join('')}</div>`;
+        `<article class="card${x.soon ? ' soon' : soldOut(x) ? ' sold' : ''}" data-href="/product/${x.id}"><a class="pic" href="/product/${x.id}" aria-label="View ${esc(x.n)}"><i>${F[String(x.o).toLowerCase()] || '🌏'} ${esc(x.o)}</i>${pic(x, 480)}${badges(x)}</a><div class="info"><h3><a href="/product/${x.id}">${esc(x.n)}</a></h3><small>${esc(x.c)}${x.sub ? ' · ' + esc(x.sub) : ''}</small>${hasPrice(x) ? `<div class="pr">${inr(x.p)}<s>${inr(x.m)}</s>${x.m > x.p ? `<em>${Math.round((1 - x.p / x.m) * 100)}% off</em>` : ''}</div>` : ''}${swatches(x)}${stockLine(x)}${x.soon ? `<a class="add pb" href="/product/${x.id}#prebook">🔔 Pre-book</a>` : unavailable(x) ? `<button class="add" disabled>Sold out</button>` : (x.colors && x.colors.length) ? `<a class="add buy" href="/product/${x.id}">🎨 Choose color</a>` : `<button class="add" data-a="${x.id}">Add to cart</button>`}</div></article>`).join('')}</div>`;
     }).catch(() => {});
   }
 

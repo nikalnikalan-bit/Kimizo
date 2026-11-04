@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>My orders – Kimizo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Bowlby+One&family=Zen+Antique&family=DM+Sans:wght@400;500;700&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bowlby+One&family=Zen+Antique&family=DM+Sans:wght@400;500;700&display=swap"></noscript>
 <link rel="stylesheet" href="style.css">
 <style>
 [hidden]{display:none!important}
@@ -61,6 +65,7 @@ h1{font-family:var(--h);font-weight:400;font-size:clamp(24px,4vw,34px);margin:0;
 <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2">
 <link rel="manifest" href="/site.webmanifest">
 <meta name="theme-color" content="#FFD23F">
+<meta name="robots" content="noindex,nofollow">
 </head>
 <body>
 <header>
@@ -86,7 +91,9 @@ const LBL={placed:'Order placed',packed:'Packed',shipped:'Shipped',delivered:'De
 const ICO={placed:'📝',packed:'📦',shipped:'🚚',delivered:'🏠'};
 let O=[],P=[],tab='all',open=new Set(),first=true;
 const G=id=>P.find(p=>p.id==id);
-const pic=i=>{const p=G(i.id);return p?(p.img?`<img src="${esc(p.img)}" alt="">`:esc(p.e)):'📦'};
+const thumb=u=>u&&u.startsWith('/api/img/')?u+'?w=160':u;
+// the picture saved with the order line, else the product's picture, else a neutral bag (no box emoji)
+const pic=i=>{const p=G(i.id),u=i.img||(p&&p.img);return u?`<img src="${esc(thumb(u))}" alt="" loading="lazy">`:(p&&p.e&&p.e!=='📦'?esc(p.e):'🛍️')};
 const fmt=d=>new Date(d).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'});
 const hist=o=>{if(o.history&&o.history.length)return o.history;const h=[{status:'placed',at:o.createdAt,note:'Order received'}];if(o.status!=='placed')h.push({status:o.status,at:null,note:''});return h};
 const isActive=o=>o.status!=='delivered'&&o.status!=='cancelled';

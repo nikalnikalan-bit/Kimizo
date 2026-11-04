@@ -112,8 +112,72 @@ app.use((req, res, next) => {
 
 app.use(express.json({ verify: (req, res, buf) => { req.rawBody = buf; } })); // rawBody is needed for the Razorpay webhook signature
 // clean product address:  /product/6   (the old /product.html?id=6 forwards there, so old links and notifications keep working)
+// home page: the products and settings are put into the page itself, so the shop appears at once (faster, no jumping)
+app.get('/', async (req, res) => {
+  await refresh(['products', 'prebooks']);
+  let html;
+  try { html = fs.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8'); } catch { return res.status(500).send('Server error'); }
+  const boot = { s: getSettings(), p: read('products').map(p => { const { desc, ...rest } = withPre(p); return rest; }) };
+  res.type('html').send(html.replace('</head>', '<script>window.__KZ=' + JSON.stringify(boot).replace(/</g, '\\u003c') + '</script>\n</head>'));
+});
 app.get('/product.html', (req, res, next) => /^\d+$/.test(String(req.query.id || '')) ? res.redirect(301, '/product/' + req.query.id) : next());
-app.get('/product/:id', (req, res) => res.sendFile(path.join(__dirname, 'public', 'product.html')));
+// ---------- SEO: robots.txt, sitemap.xml and a product page that already contains its title, description, picture and structured data ----------
+const SITE = (process.env.SITE_URL || 'https://kimizo.in').replace(/\/$/, '');   // your real address; set SITE_URL in Vercel if it changes
+const xe = v => String(v == null ? '' : v).replace(/[<>&"']/g, ch => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[ch]));
+const absUrl = u => !u ? '' : /^https?:\/\//.test(u) ? u : SITE + (u.startsWith('/') ? u : '/' + u);
+
+app.get('/robots.txt', (req, res) => res.type('text/plain').send(
+  'User-agent: *\nAllow: /\nAllow: /api/img/\nDisallow: /api/\nDisallow: /checkout\nDisallow: /orders\nDisallow: /profile\nDisallow: /login\nDisallow: /admin\n\nSitemap: ' + SITE + '/sitemap.xml\n'));
+
+app.get('/sitemap.xml', async (req, res) => {
+  await refresh(['products']);
+  const day = d => { try { return new Date(d).toISOString().slice(0, 10); } catch { return ''; } };
+  const urls = [{ loc: SITE + '/', pri: '1.0' }, ...read('products').map(p => ({ loc: SITE + '/product/' + p.id, mod: day(p.launchedAt || p.createdAt), pri: '0.8' }))];
+  res.type('application/xml').send('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
+    urls.map(u => '  <url><loc>' + xe(u.loc) + '</loc>' + (u.mod ? '<lastmod>' + u.mod + '</lastmod>' : '') + '<priority>' + u.pri + '</priority></url>').join('\n') + '\n</urlset>\n');
+});
+
+app.get('/product/:id', async (req, res) => {
+  await refresh(['products']);
+  await freshReviews();
+  let html;
+  try { html = fs.readFileSync(path.join(__dirname, 'public', 'product.html'), 'utf8'); } catch { return res.status(500).send('Server error'); }
+  const p = read('products').find(x => x.id == req.params.id);
+  if (!p) return res.status(404).type('html').send(html.replace('</head>', '<meta name="robots" content="noindex">\n</head>'));
+  const url = SITE + '/product/' + p.id;
+  const plain = String(p.desc || '').replace(/\s+/g, ' ').trim();
+  const priceTxt = p.p > 0 ? ' at ₹' + p.p : '';
+  const descr = (plain || ('Buy ' + p.n + ' online at Kimizo. Authentic ' + (p.sub || p.c) + ' from ' + p.o + priceTxt + '. Fast delivery across India.')).slice(0, 160);
+  const title = p.n + (p.p > 0 ? ' – ₹' + p.p : '') + ' | Kimizo';
+  const imgs = [p.img, ...(Array.isArray(p.imgs) ? p.imgs : [])].filter(Boolean).map(absUrl);
+  const ogImg = imgs[0] || SITE + '/og-image.png';
+  const rv = read('reviews').filter(r => r.productId == p.id);
+  const soldOut = p.stock != null && p.stock <= 0;
+  const ld = {
+    '@context': 'https://schema.org', '@type': 'Product', name: p.n, description: descr,
+    image: imgs.length ? imgs : [SITE + '/og-image.png'], sku: 'KZ-' + String(p.id).padStart(4, '0'),
+    category: [p.c, p.sub].filter(Boolean).join(' > ')
+  };
+  if (p.p > 0) ld.offers = {
+    '@type': 'Offer', url, priceCurrency: 'INR', price: String(p.p), itemCondition: 'https://schema.org/NewCondition',
+    availability: p.soon ? 'https://schema.org/PreOrder' : soldOut ? 'https://schema.org/OutOfStock' : 'https://schema.org/InStock',
+    seller: { '@type': 'Organization', name: 'Kimizo' }
+  };
+  if (rv.length) ld.aggregateRating = { '@type': 'AggregateRating', ratingValue: (rv.reduce((a, r) => a + Number(r.rating || 0), 0) / rv.length).toFixed(1), reviewCount: rv.length };
+  const tags = [
+    '<meta name="description" content="' + xe(descr) + '">',
+    '<link rel="canonical" href="' + xe(url) + '">',
+    '<meta property="og:type" content="product">', '<meta property="og:site_name" content="Kimizo">',
+    '<meta property="og:title" content="' + xe(title) + '">', '<meta property="og:description" content="' + xe(descr) + '">',
+    '<meta property="og:url" content="' + xe(url) + '">', '<meta property="og:image" content="' + xe(ogImg) + '">',
+    p.p > 0 ? '<meta property="product:price:amount" content="' + p.p + '"><meta property="product:price:currency" content="INR">' : '',
+    '<meta name="twitter:card" content="summary_large_image">', '<meta name="twitter:title" content="' + xe(title) + '">',
+    '<meta name="twitter:description" content="' + xe(descr) + '">', '<meta name="twitter:image" content="' + xe(ogImg) + '">',
+    '<script type="application/ld+json">' + JSON.stringify(ld).replace(/</g, '\\u003c') + '</script>'
+  ].filter(Boolean).join('\n');
+  html = html.replace(/<title>[^<]*<\/title>/, '<title>' + xe(title) + '</title>').replace('</head>', tags + '\n</head>');
+  res.type('html').send(html);
+});
 // clean addresses without ".html":  /login  /orders  /profile  /checkout   (old *.html links forward to them, with ?next=... kept)
 app.get(/^\/(login|orders|profile|checkout)\.html$/, (req, res) => { const q = req.url.indexOf('?'); res.redirect(301, '/' + req.params[0] + (q >= 0 ? req.url.slice(q) : '')); });
 app.get('/index.html', (req, res) => res.redirect(301, '/'));
@@ -246,6 +310,49 @@ app.get('/login', (req, res) => res.sendFile(path.join(__dirname, 'public', 'log
 // Load extra auth endpoints (Google Login + Custom OTP Flow)
 require('./auth-extra')(app, { users, write, publicUser, hashPassword, signToken, SECRET, normPhone });
 
+// ---------- Saved delivery addresses (shown at checkout, up to 5 per customer) ----------
+const cleanAddr = b => ({
+  name: String(b.name || '').trim().slice(0, 60), phone: normPhone(b.phone) || '',
+  line: String(b.line || '').trim().slice(0, 250), city: String(b.city || '').trim().slice(0, 80),
+  district: String(b.district || '').trim().slice(0, 80), state: String(b.state || '').trim().slice(0, 80),
+  pin: String(b.pin || '').replace(/\D/g, '')
+});
+const addrOk = a => a.name && a.phone && a.line.length >= 8 && /^\d{6}$/.test(a.pin) && a.city && a.district && a.state;
+const addrSorted = l => (l || []).slice().sort((a, b) => new Date(b.usedAt || b.createdAt || 0) - new Date(a.usedAt || a.createdAt || 0));
+
+app.get('/api/addresses', authed, async (req, res) => {
+  await refresh(['users']);
+  res.set('Cache-Control', 'no-store');
+  const u = users().find(x => x.id === req.user.id);
+  res.json(addrSorted(u && u.addresses));
+});
+app.post('/api/addresses', authed, async (req, res) => {
+  await refresh(['users'], true);
+  const list = users(), u = list.find(x => x.id === req.user.id);
+  if (!u) return res.status(401).json({ error: 'Account not found. Please log in again.' });
+  const a = cleanAddr(req.body || {});
+  if (!addrOk(a)) return res.status(400).json({ error: 'Please fill all the address details correctly' });
+  u.addresses = Array.isArray(u.addresses) ? u.addresses : [];
+  const now = new Date().toISOString(), id = (req.body || {}).id;
+  let cur = id ? u.addresses.find(x => x.id == id) : null;
+  if (cur) Object.assign(cur, a, { usedAt: now });
+  else {
+    if (u.addresses.length >= 5) return res.status(400).json({ error: 'You can save up to 5 addresses. Please delete one first.' });
+    cur = { id: u.addresses.reduce((m, x) => Math.max(m, x.id), 0) + 1, ...a, createdAt: now, usedAt: now };
+    u.addresses.push(cur);
+  }
+  await write('users', list);
+  res.status(201).json(addrSorted(u.addresses));
+});
+app.delete('/api/addresses/:id', authed, async (req, res) => {
+  await refresh(['users'], true);
+  const list = users(), u = list.find(x => x.id === req.user.id);
+  if (!u) return res.status(401).json({ error: 'Account not found. Please log in again.' });
+  u.addresses = (u.addresses || []).filter(x => x.id != req.params.id);
+  await write('users', list);
+  res.json(addrSorted(u.addresses));
+});
+
 // ---------- Image upload (any logged-in user: admin for products, customers for review photos) ----------
 const UP = path.join(__dirname, 'public', 'uploads');
 try { fs.mkdirSync(UP, { recursive: true }); } catch (_) {}
@@ -292,10 +399,22 @@ const dropFile = u => {
   if (u.includes('.blob.vercel-storage.com/')) { try { require('@vercel/blob').del(u).catch(() => {}); } catch (_) {} }
 };
 
+let sharp = null;
+try { sharp = require('sharp'); } catch (_) { console.log('Image thumbnails OFF (run "npm i sharp" to make product pictures load faster)'); }
+
 app.get('/api/img/:id', async (req, res) => {
   try {
     const st = await imgLoad(), id = req.params.id;
     if (!Object.prototype.hasOwnProperty.call(st, id)) return res.status(404).end();
+    // small copy for product cards / cart (?w=480). The browser and Vercel keep it, so it is made only once per size.
+    const w = parseInt(req.query.w, 10);
+    if (sharp && w >= 40 && w <= 1400 && st[id].t !== 'image/gif') {
+      try {
+        const out = await sharp(Buffer.from(st[id].d, 'base64')).rotate().resize({ width: w, withoutEnlargement: true }).webp({ quality: 78 }).toBuffer();
+        res.set({ 'Content-Type': 'image/webp', 'Cache-Control': 'public, max-age=31536000, s-maxage=31536000, immutable' });
+        return res.send(out);
+      } catch (e) { console.warn('Thumbnail failed, sending the original:', e.message); }
+    }
     res.set({ 'Content-Type': st[id].t, 'Cache-Control': 'public, max-age=31536000, s-maxage=31536000, immutable' });
     res.send(Buffer.from(st[id].d, 'base64'));
   } catch (e) { console.error('Image read failed:', e.message); res.status(500).end(); }
@@ -773,7 +892,10 @@ app.post('/api/orders', authed, async (req, res) => {
     }
     total += p.p * qty;
     if (p.ship !== undefined && p.ship !== null && p.ship !== '') manualShip += Number(p.ship) * qty; else hasDefault = true;
-    lines.push({ id: p.id, name: p.n + (color ? ' (' + color + ')' : ''), price: p.p, qty, color });
+    const picUrls = [p.img, ...(Array.isArray(p.imgs) ? p.imgs : [])].filter(Boolean);
+    const cObj = cols.find(c => c.n === color);
+    const lineImg = (cObj && cObj.i != null && picUrls[cObj.i]) ? picUrls[cObj.i] : (p.img || '');   // the chosen color's photo, else the main photo
+    lines.push({ id: p.id, name: p.n + (color ? ' (' + color + ')' : ''), price: p.p, qty, color, img: lineImg });
   }
   const st = getSettings();
   // products with their own shipping charge: that amount x qty. Others: store default (per order, free above the limit)
