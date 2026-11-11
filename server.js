@@ -863,6 +863,131 @@ const restoreStock = (o, products) => {
   o.stockRestored = true;
   return true;
 };
+// cancel + automatic Razorpay refund + message to the customer (see order-refund.js)
+// ---- cancel + automatic Razorpay refund + message to the customer (was order-refund.js, now inside this file) ----
+// Cancel + automatic refund + customer message, for paid (Razorpay) orders.
+//
+// Used when an order cannot be fulfilled (for example the item is out of stock):
+//   1. the order is cancelled and the stock is given back,
+//   2. the full amount the customer paid is refunded through the Razorpay Refund API
+//      (back to the same card / UPI / bank account the customer paid with),
+//   3. the customer gets an in-app notification (the bell) and, if SMTP is set up, an e-mail.
+// If Razorpay refuses the refund the order is still cancelled, the failure is stored on the order
+// and shown to the admin, who can press "Retry refund" (or refund from the Razorpay dashboard).
+const makeRefunds = function makeRefunds({ key, secret, read, write, refresh, saveList, sendMail, restoreStock, markPaid, fetchFn }) {
+  const doFetch = fetchFn || fetch;
+  const inr = n => '₹' + Number(n || 0).toLocaleString('en-IN');
+  const esc = s => String(s == null ? '' : s).replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
+  const now = () => new Date().toISOString();
+  const addHistory = (o, status, note) => { o.history = [...(o.history || []), { status, at: now(), note: String(note || '').slice(0, 200) }]; };
+
+  // ---- Razorpay refund (full amount paid, normal speed = no extra fee, 5-7 working days) ----
+  async function refundOrder(o) {
+    const pay = o.payment || {};
+    if (pay.refund && pay.refund.status !== 'failed') return { skipped: true, already: true };                    // never refund twice
+    if (pay.method !== 'razorpay' || !pay.rzpPaymentId || pay.status !== 'paid') return { skipped: true };       // nothing was paid online
+    try {
+      const r = await doFetch('https://api.razorpay.com/v1/payments/' + encodeURIComponent(pay.rzpPaymentId) + '/refund', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Basic ' + Buffer.from(key + ':' + secret).toString('base64') },
+        body: JSON.stringify({ amount: Math.round(o.total * 100), speed: 'normal', receipt: 'KZ-' + o.id, notes: { orderId: String(o.id), reason: 'Order cancelled' } })
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error((d.error && d.error.description) || 'Razorpay refused the refund (HTTP ' + r.status + ')');
+      o.payment = { ...pay, status: 'refunded', refund: { id: d.id, amount: o.total, status: d.status || 'pending', at: now() } };
+      addHistory(o, 'cancelled', 'Refund of ' + inr(o.total) + ' started. It reaches your original payment method in 5-7 working days.');
+      return { ok: true };
+    } catch (e) {
+      o.payment = { ...pay, refund: { status: 'failed', error: String(e.message).slice(0, 200), at: now() } };
+      console.error('Refund failed for order', o.id, e.message);
+      return { ok: false, error: e.message };
+    }
+  }
+
+  // ---- message to the customer: bell notification + e-mail ----
+  async function notifyCustomer(o, result, reason) {
+    try {
+      const names = (o.items || []).map(i => i.name).join(', ');
+      const why = String(reason || '').trim() || 'The item went out of stock';
+      const refunded = !!(result && (result.ok || result.already)), failed = !!(result && result.ok === false);
+      const head = 'Sorry! We had to cancel order #' + o.id + ' (' + names + '). Reason: ' + why + '. ';
+      const text = refunded ? head + 'Your payment of ' + inr(o.total) + ' has been refunded to your original payment method. It usually reaches you in 5-7 working days.'
+        : failed ? head + 'Your refund of ' + inr(o.total) + ' is being processed by our team and will reach you shortly. If you do not see it within 7 working days, please contact us.'
+        : head + 'No payment was taken for this order.';
+      const title = '❌ Order #' + o.id + ' cancelled' + (refunded ? ' · refund started' : '');
+
+      await refresh(['notifications'], true);
+      const notes = read('notifications').map(x => ({ ...x }));
+      notes.push({ id: notes.reduce((m, x) => Math.max(m, x.id), 0) + 1, userId: o.userId, createdAt: now(), read: false, title, text, link: '/orders.html' });
+      await saveList('notifications', notes);
+
+      const u = read('users').find(x => x.id === o.userId);
+      const to = u && u.email;
+      if (to) {
+        const site = process.env.SITE_URL || '';
+        await sendMail(to, title + ' - Kimizo',
+          '<div style="font-family:Arial,sans-serif;max-width:480px"><h2>Hi ' + esc(o.name) + ',</h2><p>' + esc(text) + '</p>' +
+          (site ? '<p><a href="' + esc(site) + '/orders.html" style="background:#E4231F;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:bold">View my orders</a></p>' : '') +
+          '<p style="color:#777;font-size:12px">We are sorry for the trouble. - Team Kimizo</p></div>');
+      }
+    } catch (e) { console.error('Customer message failed:', e.message); }     // a message problem must never block the cancellation
+  }
+
+  // ---- cancel an order: stock back + refund + message ----
+  async function cancelOrder(o, reason) {
+    o.status = 'cancelled';
+    addHistory(o, 'cancelled', reason);
+    const pr = read('products');
+    if (restoreStock(o, pr)) await write('products', pr);
+    const result = await refundOrder(o);
+    await notifyCustomer(o, result, reason);
+    return result;
+  }
+
+  // retry a refund that failed (admin button)
+  async function retryRefund(o) {
+    const result = await refundOrder(o);
+    if (result.ok) await notifyCustomer(o, result, ((o.history || []).find(h => h.status === 'cancelled') || {}).note);
+    return result;
+  }
+
+  // ---- online payment confirmed ----
+  // Normal case: order becomes "placed". Special cases where the customer paid LATE (after the 30 minute hold ended):
+  //   - order was cancelled in the meantime  -> refund at once
+  //   - stock was given back and sold out     -> cancel + refund at once
+  //   - stock still available                  -> take the stock again and place the order
+  function retakeStock(o, products) {
+    if (!o.stockRestored) return true;
+    const need = {};
+    (o.items || []).forEach(i => { need[i.id] = (need[i.id] || 0) + i.qty; });
+    const ids = Object.keys(need);
+    if (!ids.every(id => { const p = products.find(x => x.id == id); return p && (p.stock == null || p.stock >= need[id]); })) return false;
+    ids.forEach(id => { const p = products.find(x => x.id == id); if (p.stock != null) p.stock -= need[id]; });
+    o.stockRestored = false;
+    return true;
+  }
+  async function settlePaid(o, paymentId) {
+    const st = o.payment && o.payment.status;
+    if (st === 'paid' || st === 'refunded') return { changed: false };               // already handled (verify + webhook both arrive)
+    if (o.status === 'cancelled') {
+      o.payment = { ...(o.payment || {}), method: 'razorpay', status: 'paid', rzpPaymentId: paymentId, paidAt: now() };
+      addHistory(o, 'cancelled', 'Payment arrived after the order was cancelled');
+      const result = await refundOrder(o);
+      await notifyCustomer(o, result, 'This order had already been cancelled');
+      return { changed: true, cancelled: true };
+    }
+    markPaid(o, paymentId);
+    if (o.stockRestored) {
+      const pr = read('products');
+      if (retakeStock(o, pr)) await write('products', pr);
+      else { await cancelOrder(o, 'The item went out of stock while your payment was being completed'); return { changed: true, cancelled: true }; }
+    }
+    return { changed: true, cancelled: false };
+  }
+
+  return { refundOrder, cancelOrder, retryRefund, settlePaid, retakeStock, notifyCustomer };
+};
+const refunds = makeRefunds({ key: RZP_KEY, secret: RZP_SECRET, read, write, refresh, saveList, sendMail, restoreStock, markPaid });
 
 app.post('/api/orders', authed, async (req, res) => {
   const { name, phone, address, items } = req.body || {};
@@ -940,7 +1065,8 @@ app.post('/api/payment/verify', authed, async (req, res) => {
   const expected = crypto.createHmac('sha256', RZP_SECRET).update(razorpay_order_id + '|' + razorpay_payment_id).digest('hex');
   if (!razorpay_payment_id || !razorpay_signature || !safeEq(expected, razorpay_signature))
     return res.status(400).json({ error: 'Payment verification failed' });
-  if (markPaid(o, razorpay_payment_id)) await write('orders', orders);
+  const s = await refunds.settlePaid(o, razorpay_payment_id);   // places the order, or cancels + refunds it if the stock is gone
+  if (s.changed) await write('orders', orders);
   res.json(o);
 });
 
@@ -957,7 +1083,7 @@ app.post('/api/payment/webhook', async (req, res) => {
     const pay = (ev.payload && ev.payload.payment && ev.payload.payment.entity) || {};
     await refresh(['orders'], true);
     const orders = read('orders'), o = orders.find(x => x.payment && x.payment.rzpOrderId && x.payment.rzpOrderId === pay.order_id);
-    if (o && pay.amount === Math.round(o.total * 100) && markPaid(o, pay.id)) await write('orders', orders);
+    if (o && pay.amount === Math.round(o.total * 100)) { const s = await refunds.settlePaid(o, pay.id); if (s.changed) await write('orders', orders); }
   }
   res.json({ ok: true });
 });
@@ -983,6 +1109,7 @@ app.patch('/api/orders/:id', admin, async (req, res) => {
 
   // validate everything first, then apply
   if (body.status !== undefined && !ok.includes(body.status)) return res.status(400).json({ error: 'status must be one of ' + ok.join(', ') });
+  if (body.status !== undefined && o.status === 'cancelled' && body.status !== 'cancelled') return res.status(400).json({ error: 'A cancelled order cannot be reopened. Ask the customer to place a new order.' });
   let ship;
   if (body.shipping !== undefined) {
     if (o.payment && o.payment.status === 'paid') return res.status(400).json({ error: 'Shipping cannot be changed for orders already paid online' });
@@ -991,17 +1118,35 @@ app.patch('/api/orders/:id', admin, async (req, res) => {
     ship = Math.round(ship * 100) / 100;
   }
 
+  let refund;
   if (body.status !== undefined) {
     const note = String(body.note || '').trim().slice(0, 140);
-    o.status = body.status;
-    o.history = [...(o.history || []), { status: o.status, at: new Date().toISOString(), note }];
-    if (o.status === 'cancelled') { const pr = read('products'); if (restoreStock(o, pr)) await write('products', pr); }
+    if (body.status === 'cancelled') {
+      // cancelling: stock goes back, a paid order is refunded automatically, the customer gets a message
+      if (o.status !== 'cancelled') refund = await refunds.cancelOrder(o, note);
+    } else {
+      o.status = body.status;
+      o.history = [...(o.history || []), { status: o.status, at: new Date().toISOString(), note }];
+    }
   }
   if (ship !== undefined) {
     const sub = typeof o.subtotal === 'number' ? o.subtotal : o.items.reduce((m, i) => m + i.price * i.qty, 0);
     o.subtotal = sub; o.shipping = ship; o.total = Math.round((sub + ship) * 100) / 100;
   }
   await write('orders', orders);
+  res.json({ ...o, refundError: refund && refund.ok === false ? refund.error : undefined });
+});
+
+// admin: try the refund again (only for a cancelled, paid order whose refund failed)
+app.post('/api/orders/:id/refund', admin, async (req, res) => {
+  await refresh(['products', 'orders', 'notifications'], true);
+  const orders = read('orders'), o = orders.find(x => x.id == req.params.id);
+  if (!o) return res.status(404).json({ error: 'Order not found' });
+  if (o.status !== 'cancelled') return res.status(400).json({ error: 'Cancel the order first. The refund starts automatically.' });
+  const r = await refunds.retryRefund(o);
+  if (r.skipped) return res.status(400).json({ error: r.already ? 'This order is already refunded' : 'Nothing was paid online for this order, so there is nothing to refund' });
+  await write('orders', orders);
+  if (!r.ok) return res.status(502).json({ error: 'Razorpay refused the refund: ' + r.error });
   res.json(o);
 });
 

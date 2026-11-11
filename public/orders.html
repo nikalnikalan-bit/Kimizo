@@ -107,7 +107,10 @@ function card(o){
     return `<div class="stp ${cls}"><div class="c">${cls==='done'?'✓':ICO[s]}</div><span>${LBL[s]}</span><small>${e&&e.at?fmt(e.at):''}</small></div>`}).join('');
   const pct=Math.max(idx,0)/3*100;
   const eta=new Date(new Date(o.createdAt).getTime()+5*864e5).toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'});
-  const track=cancelled?`<div class="cx">❌ This order was cancelled.</div>`:
+  const rf=o.payment&&o.payment.refund,
+    refundMsg=o.payment&&o.payment.status==='refunded'?`<br><b>💰 ${inr(rf&&rf.amount||o.total)} refunded</b> to your original payment method. It usually reaches you in 5-7 working days.${rf&&rf.id?`<small style="display:block">Refund ID: ${esc(rf.id)}</small>`:''}`:
+    (rf&&rf.status==='failed'?`<br><b>💰 Your refund of ${inr(o.total)} is being processed</b> and will reach you shortly.`:'');
+  const track=cancelled?`<div class="cx">❌ This order was cancelled.${refundMsg}</div>`:
     `<div class="tr"><div class="line"><i style="width:${pct}%"></i></div><span class="truck" style="left:calc(12.5% + ${pct*0.75}%)">${o.status==='delivered'?'🎁':'🚚'}</span><div class="st4">${steps}</div></div>`+
     (o.status==='delivered'?'':`<div class="eta">📅 Expected delivery by ${eta}</div>`);
   const det=isOpen?`<div class="det">
@@ -115,7 +118,7 @@ function card(o){
     <div><h3>Order details</h3>
       ${o.items.map(i=>`<div class="sr"><span>${esc(i.name)} × ${i.qty}</span><span>${inr(i.price*i.qty)}</span></div>`).join('')}
       <div class="sr"><span>Shipping</span><span>${o.shipping?inr(o.shipping):'FREE'}</span></div>
-      <div class="sr t"><span>${o.payment&&o.payment.status==='paid'?'Total (paid online)':'Total (pay on delivery)'}</span><span>${inr(o.total)}</span></div>
+      <div class="sr t"><span>${o.payment&&o.payment.status==='refunded'?'Total (refunded)':o.payment&&o.payment.status==='paid'?'Total (paid online)':'Total (pay on delivery)'}</span><span>${inr(o.total)}</span></div>
       <p style="font-size:14px;margin:12px 0 0"><b>Delivering to</b><br>${esc(o.name)} · ${esc(o.phone)}<br>${esc(o.address)}</p>
     </div></div>`:'';
   return `<article class="oc"><div class="oh"><div><span class="id">Order #${o.id}</span><small>${fmt(o.createdAt)} · ${qty} item${qty>1?'s':''}</small></div>
