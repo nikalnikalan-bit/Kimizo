@@ -910,7 +910,9 @@ const makeRefunds = function makeRefunds({ key, secret, read, write, refresh, sa
       const names = (o.items || []).map(i => i.name).join(', ');
       const why = String(reason || '').trim() || 'The item went out of stock';
       const refunded = !!(result && (result.ok || result.already)), failed = !!(result && result.ok === false);
-      const head = 'Sorry! We had to cancel order #' + o.id + ' (' + names + '). Reason: ' + why + '. ';
+      const head = o.cancelledBy === 'customer'
+        ? 'You cancelled order #' + o.id + ' (' + names + '). '
+        : 'Sorry! We had to cancel order #' + o.id + ' (' + names + '). Reason: ' + why + '. ';
       const text = refunded ? head + 'Your payment of ' + inr(o.total) + ' has been refunded to your original payment method. It usually reaches you in 5-7 working days.'
         : failed ? head + 'Your refund of ' + inr(o.total) + ' is being processed by our team and will reach you shortly. If you do not see it within 7 working days, please contact us.'
         : head + 'No payment was taken for this order.';
@@ -934,8 +936,9 @@ const makeRefunds = function makeRefunds({ key, secret, read, write, refresh, sa
   }
 
   // ---- cancel an order: stock back + refund + message ----
-  async function cancelOrder(o, reason) {
+  async function cancelOrder(o, reason, byCustomer) {
     o.status = 'cancelled';
+    o.cancelledBy = byCustomer ? 'customer' : 'admin';
     addHistory(o, 'cancelled', reason);
     const pr = read('products');
     if (restoreStock(o, pr)) await write('products', pr);
@@ -1088,10 +1091,28 @@ app.post('/api/payment/webhook', async (req, res) => {
   res.json({ ok: true });
 });
 
+// the customer never sees internal refund error text (for example "low Razorpay balance")
+const forCustomer = o => (o.payment && o.payment.refund && o.payment.refund.error)
+  ? { ...o, payment: { ...o.payment, refund: { ...o.payment.refund, error: undefined } } } : o;
 app.get('/api/my-orders', authed, async (req, res) => {
   await refresh(['orders']);
   res.set('Cache-Control', 'no-store');
-  res.json(read('orders').filter(o => o.userId === req.user.id && o.status !== 'payment_pending').reverse());
+  res.json(read('orders').filter(o => o.userId === req.user.id && o.status !== 'payment_pending').reverse().map(forCustomer));
+});
+
+// customer: cancel my own order. Allowed only while it is still "placed" (not packed / shipped yet).
+// A paid order is refunded automatically to the original payment method and the stock goes back.
+app.post('/api/orders/:id/cancel', authed, async (req, res) => {
+  await refresh(['products', 'orders', 'notifications'], true);
+  const orders = read('orders'), o = orders.find(x => x.id == req.params.id && x.userId === req.user.id);
+  if (!o) return res.status(404).json({ error: 'Order not found' });
+  if (o.status === 'cancelled') return res.status(400).json({ error: 'This order is already cancelled' });
+  if (o.status === 'payment_pending') return res.status(400).json({ error: 'This order is not paid yet' });
+  if (o.status !== 'placed') return res.status(400).json({ error: 'This order is already ' + o.status + ' and can no longer be cancelled. Please contact us.' });
+  const why = String((req.body || {}).reason || '').trim().slice(0, 100);
+  const refund = await refunds.cancelOrder(o, 'Cancelled by customer' + (why ? ': ' + why : ''), true);
+  await write('orders', orders);
+  res.json({ ...forCustomer(o), refundPending: refund.ok === false });
 });
 app.get('/api/orders', admin, async (req, res) => {
   await refresh(['orders'], true);

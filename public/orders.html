@@ -43,6 +43,7 @@ h1{font-family:var(--h);font-weight:400;font-size:clamp(24px,4vw,34px);margin:0;
 @keyframes bob{50%{transform:translateX(-50%) translateY(-5px)}}
 .cx{background:#ffe3e1;border:3px solid var(--ink);border-radius:10px;padding:10px 14px;font-weight:700;margin:14px 0 0}
 .eta{background:var(--cream);border:2px dashed var(--ink);border-radius:10px;padding:8px 12px;margin-top:14px;font-weight:700;font-size:14px}
+.cbtn{margin-top:12px;margin-left:8px;border:3px solid var(--red);background:#fff;color:var(--red);border-radius:99px;padding:6px 16px;font:inherit;font-weight:700;cursor:pointer}.cbtn:disabled{opacity:.6;cursor:wait}
 .more{margin-top:12px;border:3px solid var(--ink);background:#fff;border-radius:99px;padding:6px 16px;font:inherit;font-weight:700;cursor:pointer}
 .det{margin-top:14px;border-top:3px dashed var(--ink);padding-top:14px;display:grid;grid-template-columns:1.1fr 1fr;gap:20px}
 .det h3{font-family:var(--h);font-weight:400;font-size:15px;margin:0 0 10px}
@@ -125,7 +126,7 @@ function card(o){
     <div style="text-align:right"><span class="pill s-${esc(o.status)}">${LBL[o.status]||esc(o.status)}</span><small style="margin-top:4px;font-weight:700;color:var(--ink)">${inr(o.total)}</small></div></div>
     <div class="thumbs">${o.items.slice(0,6).map(i=>`<div class="pt" title="${esc(i.name)}">${pic(i)}${i.qty>1?`<em>×${i.qty}</em>`:''}</div>`).join('')}</div>
     ${track}${det}
-    <button class="more" data-o="${o.id}">${isOpen?'Hide details ▴':'Track order ▾'}</button></article>`;
+    <button class="more" data-o="${o.id}">${isOpen?'Hide details ▴':'Track order ▾'}</button>${o.status==='placed'?`<button class="cbtn" data-c="${o.id}">Cancel order</button>`:''}</article>`;
 }
 
 function render(){
@@ -135,7 +136,23 @@ function render(){
   $('list').innerHTML=L.length?L.map(card).join(''):`<div class="empty"><div class="e">🛍️</div><h2>${O.length?'No orders here':'No orders yet'}</h2><a class="cta" href="/">Start shopping</a></div>`;
 }
 $('tabs').onclick=e=>{const t=e.target.dataset.t;if(t){tab=t;render()}};
-$('list').onclick=e=>{const b=e.target.closest('.more');if(!b)return;const id=+b.dataset.o;open.has(id)?open.delete(id):open.add(id);render()};
+$('list').onclick=async e=>{
+  const c=e.target.closest('.cbtn');
+  if(c){
+    const id=+c.dataset.c,o=O.find(x=>x.id===id);if(!o)return;
+    const paid=o.payment&&o.payment.status==='paid';
+    const why=prompt('Cancel order #'+id+'?'+(paid?'\n\nYour payment of '+inr(o.total)+' will be refunded to your original payment method in 5-7 working days.':'')+'\n\nTell us why (optional), then press OK to cancel the order.','');
+    if(why===null)return;
+    c.disabled=true;c.textContent='Cancelling...';
+    try{
+      const r=await fetch('/api/orders/'+id+'/cancel',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+tok},body:JSON.stringify({reason:why})});
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok)throw new Error(d.error||'Could not cancel the order');
+      alert(d.refundPending?'Your order is cancelled. Your refund is being processed and will reach you soon.':paid?'Your order is cancelled and your refund has started. It reaches you in 5-7 working days.':'Your order is cancelled.');
+    }catch(x){alert(x.message)}
+    load();return;
+  }
+  const b=e.target.closest('.more');if(!b)return;const id=+b.dataset.o;open.has(id)?open.delete(id):open.add(id);render()};
 $('rf').onclick=()=>load();
 $('lo').onclick=e=>{e.preventDefault();localStorage.removeItem('kz_token');localStorage.removeItem('kz_user');location.href='/'};
 
