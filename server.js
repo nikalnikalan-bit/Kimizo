@@ -488,14 +488,23 @@ app.put('/api/settings', admin, async (req, res) => {
 });
 app.get('/api/admin/check', admin, (req, res) => res.json({ ok: true }));
 // Shows only true/false (never the values) so you can confirm env variables reached this deployment. Open /api/env-check
-app.get('/api/env-check', (req, res) => res.json({
+app.get('/api/env-check', async (req, res) => {
+  // does each Drive file exist? (service accounts cannot create files, so notifications.json etc. must be created once by hand)
+  const driveFiles = {};
+  if (process.env.GOOGLE_DRIVE_FOLDER_ID)
+    for (const n of ['users', 'products', 'orders', 'settings', 'notifications', 'prebooks', 'reviews', 'images'])
+      driveFiles[n] = await readFromDriveStrict(n).then(d => d !== null).catch(() => 'error');
+  res.json({
+  driveFiles,                       // false = file missing in your Drive folder
+  customerEmail: !!mailer,          // false = SMTP not set up, no refund / arrival e-mails are sent
   onVercel: !!process.env.VERCEL,
   blobToken: !!process.env.BLOB_READ_WRITE_TOKEN,
   razorpay: !!(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET),
   driveFolder: !!process.env.GOOGLE_DRIVE_FOLDER_ID,
   adminOrigins: ADMIN_ORIGINS,   // which admin sites may call this API (from ADMIN_ORIGIN) - empty list = CORS is not set up
   imageStorage: process.env.BLOB_READ_WRITE_TOKEN ? 'vercel-blob' : (process.env.GOOGLE_DRIVE_FOLDER_ID ? 'google-drive' : 'local-disk')
-}));
+  });
+});
 // the admin panel is a separate site now; the old /admin address only forwards there (set ADMIN_URL in .env)
 app.get('/admin', (req, res) => process.env.ADMIN_URL ? res.redirect(process.env.ADMIN_URL) : res.status(404).send('Not found'));
 
@@ -905,7 +914,26 @@ const makeRefunds = function makeRefunds({ key, secret, read, write, refresh, sa
   }
 
   // ---- message to the customer: bell notification + e-mail ----
+  // saves the bell notification (and sends the e-mail when SMTP is set up). `out` collects what worked.
+  async function sendNote(out, o, title, text, foot) {
+    await refresh(['notifications'], true);
+    const notes = read('notifications').map(x => ({ ...x }));
+    notes.push({ id: notes.reduce((m, x) => Math.max(m, x.id), 0) + 1, userId: o.userId, createdAt: now(), read: false, title, text, link: '/orders.html' });
+    await saveList('notifications', notes);
+    out.inApp = true;
+    const u = read('users').find(x => x.id === o.userId);
+    const to = u && u.email;
+    if (to) {
+      const site = process.env.SITE_URL || '';
+      out.emailed = await sendMail(to, title + ' - Kimizo',
+        '<div style="font-family:Arial,sans-serif;max-width:480px"><h2>Hi ' + esc(o.name) + ',</h2><p>' + esc(text) + '</p>' +
+        (site ? '<p><a href="' + esc(site) + '/orders.html" style="background:#E4231F;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:bold">View my orders</a></p>' : '') +
+        '<p style="color:#777;font-size:12px">' + esc(foot) + '</p></div>');
+    }
+  }
+
   async function notifyCustomer(o, result, reason) {
+    const out = { inApp: false, emailed: false, error: null };
     try {
       const names = (o.items || []).map(i => i.name).join(', ');
       const why = String(reason || '').trim() || 'The item went out of stock';
@@ -914,25 +942,17 @@ const makeRefunds = function makeRefunds({ key, secret, read, write, refresh, sa
         ? 'You cancelled order #' + o.id + ' (' + names + '). '
         : 'Sorry! We had to cancel order #' + o.id + ' (' + names + '). Reason: ' + why + '. ';
       const text = refunded ? head + 'Your payment of ' + inr(o.total) + ' has been refunded to your original payment method. It usually reaches you in 5-7 working days.'
-        : failed ? head + 'Your refund of ' + inr(o.total) + ' is being processed by our team and will reach you shortly. If you do not see it within 7 working days, please contact us.'
+        : failed ? head + 'Your refund of ' + inr(o.total) + ' is being processed by our team and will be sent to your original payment method soon. We will send you another message as soon as it is sent.'
         : head + 'No payment was taken for this order.';
-      const title = '❌ Order #' + o.id + ' cancelled' + (refunded ? ' · refund started' : '');
+      const title = '❌ Order #' + o.id + ' cancelled' + (refunded ? ' · refund started' : failed ? ' · refund pending' : '');
 
-      await refresh(['notifications'], true);
-      const notes = read('notifications').map(x => ({ ...x }));
-      notes.push({ id: notes.reduce((m, x) => Math.max(m, x.id), 0) + 1, userId: o.userId, createdAt: now(), read: false, title, text, link: '/orders.html' });
-      await saveList('notifications', notes);
-
-      const u = read('users').find(x => x.id === o.userId);
-      const to = u && u.email;
-      if (to) {
-        const site = process.env.SITE_URL || '';
-        await sendMail(to, title + ' - Kimizo',
-          '<div style="font-family:Arial,sans-serif;max-width:480px"><h2>Hi ' + esc(o.name) + ',</h2><p>' + esc(text) + '</p>' +
-          (site ? '<p><a href="' + esc(site) + '/orders.html" style="background:#E4231F;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:bold">View my orders</a></p>' : '') +
-          '<p style="color:#777;font-size:12px">We are sorry for the trouble. - Team Kimizo</p></div>');
-      }
-    } catch (e) { console.error('Customer message failed:', e.message); }     // a message problem must never block the cancellation
+      await sendNote(out, o, title, text, 'We are sorry for the trouble. - Team Kimizo');
+    } catch (e) {     // a message problem must never block the cancellation, but it is reported to the admin and logged
+      out.error = e.message;
+      console.error('Customer message for order ' + o.id + ' FAILED:', e.message);
+    }
+    if (!out.error && !out.emailed) console.log('Order ' + o.id + ': customer got the in-app notification; e-mail was not sent (SMTP not set up or customer has no e-mail).');
+    return out;
   }
 
   // ---- cancel an order: stock back + refund + message ----
@@ -943,8 +963,8 @@ const makeRefunds = function makeRefunds({ key, secret, read, write, refresh, sa
     const pr = read('products');
     if (restoreStock(o, pr)) await write('products', pr);
     const result = await refundOrder(o);
-    await notifyCustomer(o, result, reason);
-    return result;
+    const notice = await notifyCustomer(o, result, reason);
+    return { ...result, notice };
   }
 
   // retry a refund that failed (admin button)
@@ -988,7 +1008,41 @@ const makeRefunds = function makeRefunds({ key, secret, read, write, refresh, sa
     return { changed: true, cancelled: false };
   }
 
-  return { refundOrder, cancelOrder, retryRefund, settlePaid, retakeStock, notifyCustomer };
+  // ---- Razorpay webhook: refund.processed / refund.failed ----
+  // Also covers a refund the admin made by hand in the Razorpay dashboard (the order is then marked refunded too).
+  async function refundDone(o, r) {
+    const pay = o.payment || {};
+    if (o.status !== 'cancelled' || !r || !pay.rzpPaymentId || r.payment_id !== pay.rzpPaymentId) return false;
+    if (pay.refund && pay.refund.status === 'processed') return false;                 // customer already told
+    if (Number(r.amount) !== Math.round(o.total * 100)) return false;                  // partial refund made by hand: not ours
+    o.payment = { ...pay, status: 'refunded', refund: { ...(pay.refund || {}), id: r.id, amount: o.total, status: 'processed', at: (pay.refund && pay.refund.at) || now(), processedAt: now(), error: undefined } };
+    addHistory(o, 'cancelled', 'Refund of ' + inr(o.total) + ' processed (' + r.id + ')');
+    const out = { inApp: false, emailed: false, error: null };
+    try {
+      await sendNote(out, o, '💰 Refund of ' + inr(o.total) + ' processed',
+        'Good news! Your refund of ' + inr(o.total) + ' for cancelled order #' + o.id + ' has been processed. It reaches your original payment method within 5-7 working days (UPI and cards are often faster).',
+        'Thank you for your patience. - Team Kimizo');
+    } catch (e) { console.error('Refund-processed message for order ' + o.id + ' FAILED:', e.message); }
+    return true;
+  }
+  function refundFailed(o, r) {
+    const pay = o.payment || {};
+    if (!r || !pay.refund || pay.refund.id !== r.id) return false;
+    o.payment = { ...pay, status: 'paid', refund: { ...pay.refund, status: 'failed', error: 'Razorpay could not complete this refund. Press Retry refund.' } };
+    return true;
+  }
+  // admin: try every refund that is still waiting (for example after adding money to the Razorpay balance)
+  async function retryAll(orders) {
+    let done = 0; const failed = [];
+    for (const o of orders) {
+      if (o.status !== 'cancelled' || !o.payment || o.payment.status !== 'paid') continue;
+      const r = await retryRefund(o);
+      if (r.ok) done++; else if (!r.skipped) failed.push({ id: o.id, error: r.error });
+    }
+    return { done, failed };
+  }
+
+  return { refundOrder, cancelOrder, retryRefund, retryAll, refundDone, refundFailed, settlePaid, retakeStock, notifyCustomer };
 };
 const refunds = makeRefunds({ key: RZP_KEY, secret: RZP_SECRET, read, write, refresh, saveList, sendMail, restoreStock, markPaid });
 
@@ -1074,7 +1128,7 @@ app.post('/api/payment/verify', authed, async (req, res) => {
 });
 
 // Razorpay webhook (backup if the customer closes the page right after paying)
-// Dashboard → Settings → Webhooks → URL: https://YOUR-DOMAIN/api/payment/webhook, events: payment.captured, order.paid
+// Dashboard → Settings → Webhooks → URL: https://YOUR-DOMAIN/api/payment/webhook, events: payment.captured, order.paid, refund.processed, refund.failed
 app.post('/api/payment/webhook', async (req, res) => {
   const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
   const sig = req.get('x-razorpay-signature');
@@ -1087,6 +1141,16 @@ app.post('/api/payment/webhook', async (req, res) => {
     await refresh(['orders'], true);
     const orders = read('orders'), o = orders.find(x => x.payment && x.payment.rzpOrderId && x.payment.rzpOrderId === pay.order_id);
     if (o && pay.amount === Math.round(o.total * 100)) { const s = await refunds.settlePaid(o, pay.id); if (s.changed) await write('orders', orders); }
+  }
+  // refund finished / failed at Razorpay -> tell the customer "your money is on its way", or mark it for a retry
+  if (ev.event === 'refund.processed' || ev.event === 'refund.failed') {
+    const rf = (ev.payload && ev.payload.refund && ev.payload.refund.entity) || {};
+    await refresh(['orders', 'notifications'], true);
+    const orders = read('orders'), o = orders.find(x => x.payment && x.payment.rzpPaymentId && x.payment.rzpPaymentId === rf.payment_id);
+    if (o) {
+      const changed = ev.event === 'refund.processed' ? await refunds.refundDone(o, rf) : refunds.refundFailed(o, rf);
+      if (changed) await write('orders', orders);
+    }
   }
   res.json({ ok: true });
 });
@@ -1155,7 +1219,17 @@ app.patch('/api/orders/:id', admin, async (req, res) => {
     o.subtotal = sub; o.shipping = ship; o.total = Math.round((sub + ship) * 100) / 100;
   }
   await write('orders', orders);
-  res.json({ ...o, refundError: refund && refund.ok === false ? refund.error : undefined });
+  res.json({ ...o, refundError: refund && refund.ok === false ? refund.error : undefined,
+    noticeError: refund && refund.notice && refund.notice.error ? refund.notice.error : undefined });
+});
+
+// admin: retry ALL refunds that are still waiting (after adding money to the Razorpay balance)
+app.post('/api/orders/refund-all', admin, async (req, res) => {
+  await refresh(['products', 'orders', 'notifications'], true);
+  const orders = read('orders');
+  const r = await refunds.retryAll(orders);
+  await write('orders', orders);
+  res.json(r);
 });
 
 // admin: try the refund again (only for a cancelled, paid order whose refund failed)

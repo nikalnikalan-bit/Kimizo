@@ -56,6 +56,7 @@ h1{font-family:var(--h);font-weight:400;font-size:clamp(24px,4vw,34px);margin:0;
 .sr.t{border-top:2px solid var(--ink);margin-top:6px;padding-top:8px;font-weight:700}
 .empty{text-align:center;padding:50px 10px}.empty .e{font-size:60px}
 .cta{display:inline-block;margin-top:12px;background:var(--red);color:#fff;border:3px solid var(--ink);box-shadow:4px 4px 0 var(--ink);font-family:var(--h);padding:10px 24px;border-radius:99px;text-decoration:none}
+.mb{background:#e3f7ea;border:3px solid var(--ink);border-radius:12px;padding:10px 14px;margin:0 0 12px}.mb b{display:block}.mb p{margin:4px 0 0;font-size:14px}.mb small{color:var(--mute)}
 .note{text-align:center;color:var(--mute);font-size:12px}
 @media(max-width:700px){.det{grid-template-columns:1fr}.stp span{font-size:11px}}
 @media(prefers-reduced-motion:reduce){.truck,.stp.now .c{animation:none}}
@@ -76,6 +77,7 @@ h1{font-family:var(--h);font-weight:400;font-size:clamp(24px,4vw,34px);margin:0;
 
 <main class="page">
   <div class="top"><h1>My orders</h1><button class="rf" id="rf">↻ Refresh</button></div>
+  <div id="msgs"></div>
   <div class="tabs" id="tabs"></div>
   <div id="list"></div>
   <p class="note" id="upd"></p>
@@ -109,8 +111,8 @@ function card(o){
   const pct=Math.max(idx,0)/3*100;
   const eta=new Date(new Date(o.createdAt).getTime()+5*864e5).toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'});
   const rf=o.payment&&o.payment.refund,
-    refundMsg=o.payment&&o.payment.status==='refunded'?`<br><b>💰 ${inr(rf&&rf.amount||o.total)} refunded</b> to your original payment method. It usually reaches you in 5-7 working days.${rf&&rf.id?`<small style="display:block">Refund ID: ${esc(rf.id)}</small>`:''}`:
-    (rf&&rf.status==='failed'?`<br><b>💰 Your refund of ${inr(o.total)} is being processed</b> and will reach you shortly.`:'');
+    refundMsg=o.payment&&o.payment.status==='refunded'?`<br><b>💰 ${inr(rf&&rf.amount||o.total)} ${rf&&rf.status==='processed'?'refund processed':'refunded'}</b> to your original payment method. It usually reaches you in 5-7 working days.${rf&&rf.id?`<small style="display:block">Refund ID: ${esc(rf.id)}</small>`:''}`:
+    (o.payment&&o.payment.status==='paid'?`<br><b>⏳ Your refund of ${inr(o.total)} is pending.</b> We will send it to your original payment method soon and notify you.`:'');
   const track=cancelled?`<div class="cx">❌ This order was cancelled.${refundMsg}</div>`:
     `<div class="tr"><div class="line"><i style="width:${pct}%"></i></div><span class="truck" style="left:calc(12.5% + ${pct*0.75}%)">${o.status==='delivered'?'🎁':'🚚'}</span><div class="st4">${steps}</div></div>`+
     (o.status==='delivered'?'':`<div class="eta">📅 Expected delivery by ${eta}</div>`);
@@ -156,13 +158,21 @@ $('list').onclick=async e=>{
 $('rf').onclick=()=>load();
 $('lo').onclick=e=>{e.preventDefault();localStorage.removeItem('kz_token');localStorage.removeItem('kz_user');location.href='/'};
 
+// messages about my orders (cancelled / refund) of the last 7 days. The 🔔 bell is only on the shop pages, so they are shown here too.
+async function loadMsgs(){
+  try{
+    const r=await fetch('/api/notifications',{headers:{Authorization:'Bearer '+tok},cache:'no-store'});if(!r.ok)return;
+    const L=(await r.json()).filter(n=>n.link==='/orders.html'&&Date.now()-new Date(n.createdAt)<7*864e5).slice(0,3);
+    $('msgs').innerHTML=L.map(n=>`<div class="mb"><b>${esc(n.title)}</b><p>${esc(n.text)}</p><small>${esc(new Date(n.createdAt).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'}))}</small></div>`).join('');
+  }catch(e){}
+}
 async function load(){
   try{
     const [r,pr]=await Promise.all([fetch('/api/my-orders',{headers:{Authorization:'Bearer '+tok}}),fetch('/api/products')]);
     if(r.status===401){localStorage.removeItem('kz_token');localStorage.removeItem('kz_user');location.href='/login?next=/orders';return}
     O=await r.json();P=await pr.json();
     if(first){first=false;const a=O.find(isActive)||O[0];if(a)open.add(a.id)}
-    render();
+    render();loadMsgs();
     $('upd').textContent='Updated '+new Date().toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit'})+' · refreshes automatically every 30 seconds';
   }catch(e){$('list').innerHTML='<div class="empty">Could not load your orders. Is the server running?</div>'}
 }
