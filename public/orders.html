@@ -15,6 +15,7 @@
 .page{max-width:900px;margin:24px auto;padding:0 4vw 60px}
 .top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}
 h1{font-family:var(--h);font-weight:400;font-size:clamp(24px,4vw,34px);margin:0;background:var(--red);color:#fff;padding:4px 18px;border:3px solid var(--ink);box-shadow:5px 5px 0 var(--ink);transform:rotate(-1deg)}
+.rf:disabled{opacity:.7;cursor:wait}
 .rf{border:3px solid var(--ink);background:#fff;border-radius:99px;padding:6px 16px;font:inherit;font-weight:700;cursor:pointer;box-shadow:3px 3px 0 var(--ink)}
 .tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
 .tabs button{border:3px solid var(--ink);background:#fff;border-radius:99px;padding:5px 14px;font:inherit;font-weight:700;cursor:pointer}
@@ -155,24 +156,29 @@ $('list').onclick=async e=>{
     load();return;
   }
   const b=e.target.closest('.more');if(!b)return;const id=+b.dataset.o;open.has(id)?open.delete(id):open.add(id);render()};
-$('rf').onclick=()=>load();
+$('rf').onclick=async()=>{
+  const b=$('rf');if(b.disabled)return;
+  b.disabled=true;b.textContent='↻ Refreshing...';
+  await load(true);                       // true = ask the server for the newest data, not a saved copy
+  b.textContent='✓ Updated';setTimeout(()=>{b.textContent='↻ Refresh';b.disabled=false},1200);
+};
 $('lo').onclick=e=>{e.preventDefault();localStorage.removeItem('kz_token');localStorage.removeItem('kz_user');location.href='/'};
 
 // messages about my orders (cancelled / refund) of the last 7 days. The 🔔 bell is only on the shop pages, so they are shown here too.
-async function loadMsgs(){
+async function loadMsgs(fresh){
   try{
-    const r=await fetch('/api/notifications',{headers:{Authorization:'Bearer '+tok},cache:'no-store'});if(!r.ok)return;
+    const r=await fetch('/api/notifications'+(fresh?'?fresh=1':''),{headers:{Authorization:'Bearer '+tok},cache:'no-store'});if(!r.ok)return;
     const L=(await r.json()).filter(n=>n.link==='/orders.html'&&Date.now()-new Date(n.createdAt)<7*864e5).slice(0,3);
     $('msgs').innerHTML=L.map(n=>`<div class="mb"><b>${esc(n.title)}</b><p>${esc(n.text)}</p><small>${esc(new Date(n.createdAt).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'}))}</small></div>`).join('');
   }catch(e){}
 }
-async function load(){
+async function load(fresh){
   try{
-    const [r,pr]=await Promise.all([fetch('/api/my-orders',{headers:{Authorization:'Bearer '+tok}}),fetch('/api/products')]);
+    const [r,pr]=await Promise.all([fetch('/api/my-orders'+(fresh===true?'?fresh=1':''),{headers:{Authorization:'Bearer '+tok},cache:'no-store'}),fetch('/api/products',{cache:'no-store'})]);
     if(r.status===401){localStorage.removeItem('kz_token');localStorage.removeItem('kz_user');location.href='/login?next=/orders';return}
     O=await r.json();P=await pr.json();
     if(first){first=false;const a=O.find(isActive)||O[0];if(a)open.add(a.id)}
-    render();loadMsgs();
+    render();loadMsgs(fresh===true);
     $('upd').textContent='Updated '+new Date().toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit'})+' · refreshes automatically every 30 seconds';
   }catch(e){$('list').innerHTML='<div class="empty">Could not load your orders. Is the server running?</div>'}
 }

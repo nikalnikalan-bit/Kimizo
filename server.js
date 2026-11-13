@@ -795,7 +795,7 @@ app.delete('/api/my-prebooks/:id', authed, async (req, res) => {
 
 // customer: notifications (the bell in the header)
 app.get('/api/notifications', authed, async (req, res) => {
-  await refresh(['notifications', 'products']);
+  await refresh(['notifications', 'products'], req.query.fresh === '1');
   res.set('Cache-Control', 'no-store');
   const prods = read('products');
   res.json(read('notifications').filter(n => n.userId === req.user.id).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 30)
@@ -1159,7 +1159,7 @@ app.post('/api/payment/webhook', async (req, res) => {
 const forCustomer = o => (o.payment && o.payment.refund && o.payment.refund.error)
   ? { ...o, payment: { ...o.payment, refund: { ...o.payment.refund, error: undefined } } } : o;
 app.get('/api/my-orders', authed, async (req, res) => {
-  await refresh(['orders']);
+  await refresh(['orders'], req.query.fresh === '1');
   res.set('Cache-Control', 'no-store');
   res.json(read('orders').filter(o => o.userId === req.user.id && o.status !== 'payment_pending').reverse().map(forCustomer));
 });
@@ -1177,6 +1177,20 @@ app.post('/api/orders/:id/cancel', authed, async (req, res) => {
   const refund = await refunds.cancelOrder(o, 'Cancelled by customer' + (why ? ': ' + why : ''), true);
   await write('orders', orders);
   res.json({ ...forCustomer(o), refundPending: refund.ok === false });
+});
+// admin: tiny summary polled every 30 s by the admin panel (number badge on the Orders tab + "new order" alert)
+app.get('/api/orders/summary', admin, async (req, res) => {
+  await refresh(['orders']);   // re-reads Drive at most every 5 seconds
+  res.set('Cache-Control', 'no-store');
+  const l = read('orders').filter(o => o.status !== 'payment_pending');
+  const newest = l.reduce((m, o) => (o.id > m.id ? o : m), { id: 0 });
+  res.json({
+    newOrders: l.filter(o => o.status === 'placed').length,                                                 // paid, not packed yet
+    toShip: l.filter(o => o.status === 'placed' || o.status === 'packed').length,
+    refundsDue: l.filter(o => o.status === 'cancelled' && o.payment && o.payment.status === 'paid').length,
+    total: l.length,
+    latest: newest.id ? { id: newest.id, name: newest.name, total: newest.total, createdAt: newest.createdAt } : null
+  });
 });
 app.get('/api/orders', admin, async (req, res) => {
   await refresh(['orders'], true);
